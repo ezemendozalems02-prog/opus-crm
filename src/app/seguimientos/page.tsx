@@ -1,435 +1,310 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
+import { useState, useEffect } from 'react'
+import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
-import { LeadStatusBadge } from '@/components/leads/lead-status-badge'
-import { InterestStars } from '@/components/leads/interest-stars'
-import { mockLeads } from '@/lib/mock-data'
-import type { Lead } from '@/lib/types'
-import {
-  AtSign, Phone, CheckCircle2, Clock, Bell, CalendarDays,
-  ChevronRight, Flame, Snowflake, Zap, AlertTriangle, Plus
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
+import { 
+  Bell, Calendar, Clock, CheckCircle2, XCircle, 
+  Search, Plus, MapPin, AtSign, Phone, Loader2,
+  ChevronRight, AlertTriangle, Trash2
 } from 'lucide-react'
-import Link from 'next/link'
-import { format, isToday, isPast, isFuture, parseISO, differenceInDays, addDays } from 'date-fns'
-import { es } from 'date-fns/locale'
+import type { Seguimiento, Prospecto } from '@/lib/types'
+import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-
-// ——— Urgency logic ———
-
-type UrgencyLevel = 'urgente' | 'seguimiento' | 'activo' | 'enfriado'
-
-interface UrgencyTag {
-  level: UrgencyLevel
-  label: string
-  bg: string
-  text: string
-  border: string
-  icon: React.ReactNode
-  sortPriority: number
-}
-
-const URGENCY_MAP: Record<UrgencyLevel, Omit<UrgencyTag, 'level' | 'sortPriority'>> = {
-  urgente: {
-    label: 'Urgente',
-    bg: 'bg-red-900/30',
-    text: 'text-red-300',
-    border: 'border-red-700/60',
-    icon: <AlertTriangle className="w-3 h-3" />,
-  },
-  seguimiento: {
-    label: 'Seguimiento',
-    bg: 'bg-yellow-900/30',
-    text: 'text-yellow-300',
-    border: 'border-yellow-700/60',
-    icon: <Bell className="w-3 h-3" />,
-  },
-  activo: {
-    label: 'Activo',
-    bg: 'bg-green-900/30',
-    text: 'text-green-300',
-    border: 'border-green-700/60',
-    icon: <Zap className="w-3 h-3" />,
-  },
-  enfriado: {
-    label: 'Enfriado',
-    bg: 'bg-blue-900/20',
-    text: 'text-blue-300',
-    border: 'border-blue-700/40',
-    icon: <Snowflake className="w-3 h-3" />,
-  },
-}
-
-function getUrgency(lead: Lead): UrgencyTag {
-  const todayDate = new Date()
-  todayDate.setHours(0, 0, 0, 0)
-
-  const lastContacted = lead.last_contacted_at ? parseISO(lead.last_contacted_at) : null
-  const daysSinceContact = lastContacted ? differenceInDays(todayDate, lastContacted) : 999
-
-  let level: UrgencyLevel
-  let sortPriority: number
-
-  if (['replied', 'interested'].includes(lead.status) && daysSinceContact <= 2) {
-    level = 'activo'
-    sortPriority = 1
-  } else if (daysSinceContact >= 5) {
-    level = 'enfriado'
-    sortPriority = 3
-  } else if (daysSinceContact >= 2 || !lead.last_contacted_at) {
-    level = 'urgente'
-    sortPriority = 0
-  } else {
-    level = 'seguimiento'
-    sortPriority = 2
-  }
-
-  return { level, sortPriority, ...URGENCY_MAP[level] }
-}
-
-function sortByUrgency(list: Lead[]): Lead[] {
-  return [...list].sort((a, b) => {
-    const ua = getUrgency(a)
-    const ub = getUrgency(b)
-    if (ua.sortPriority !== ub.sortPriority) return ua.sortPriority - ub.sortPriority
-    if (b.interest_level !== a.interest_level) return b.interest_level - a.interest_level
-    return b.score - a.score
-  })
-}
-
-function addDaysToToday(n: number): string {
-  return addDays(new Date(), n).toISOString().split('T')[0]
-}
-
-// ——— Main component ———
+import { format, isToday, isBefore, parseISO, isAfter } from 'date-fns'
+import { es } from 'date-fns/locale'
+import Link from 'next/link'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function SeguimientosPage() {
-  const [leads, setLeads] = useState<Lead[]>(
-    mockLeads.filter((l) => !['won', 'lost'].includes(l.status))
-  )
-  const [completed, setCompleted] = useState<Set<string>>(new Set())
+  const [seguimientos, setSeguimientos] = useState<Seguimiento[]>([])
+  const [prospectos, setProspectos] = useState<Prospecto[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<'todos' | 'hoy' | 'vencidos' | 'pendientes'>('todos')
+  const [showForm, setShowForm] = useState(false)
+  const supabase = createClient()
 
-  function reprogramar(id: string, days: number) {
-    const nuevaFecha = addDaysToToday(days)
-    setLeads((prev) => prev.map((l) => l.id === id ? { ...l, next_followup_at: nuevaFecha } : l))
-    toast.success(`Reprogramado para ${format(parseISO(nuevaFecha), "d 'de' MMMM", { locale: es })}`)
+  const fetchData = async () => {
+    setLoading(true)
+    const { data: sData } = await supabase
+      .from('seguimientos')
+      .select('*, prospectos(*)')
+      .order('fecha', { ascending: true })
+    
+    const { data: pData } = await supabase.from('prospectos').select('*').order('nombre')
+    
+    if (sData) setSeguimientos(sData)
+    if (pData) setProspectos(pData)
+    setLoading(false)
   }
 
-  function marcarHecho(id: string) {
-    setCompleted((prev) => new Set([...prev, id]))
-    toast.success('Seguimiento marcado como hecho')
+  useEffect(() => {
+    fetchData()
+  }, [supabase])
+
+  const filtered = seguimientos.filter((s) => {
+    const matchSearch = (s as any).prospectos?.nombre.toLowerCase().includes(search.toLowerCase()) || 
+                       s.titulo.toLowerCase().includes(search.toLowerCase())
+    
+    const sDate = parseISO(s.fecha)
+    if (filter === 'hoy') return matchSearch && isToday(sDate) && s.estado === 'pendiente'
+    if (filter === 'vencidos') return matchSearch && isBefore(sDate, new Date()) && !isToday(sDate) && s.estado === 'pendiente'
+    if (filter === 'pendientes') return matchSearch && isAfter(sDate, new Date()) && s.estado === 'pendiente'
+    return matchSearch
+  })
+
+  async function handleToggleEstado(s: Seguimiento) {
+    const nuevoEstado = s.estado === 'pendiente' ? 'completado' : 'pendiente'
+    const { error } = await supabase
+      .from('seguimientos')
+      .update({ estado: nuevoEstado })
+      .eq('id', s.id)
+    
+    if (error) toast.error('Error al actualizar')
+    else {
+      toast.success(nuevoEstado === 'completado' ? 'Seguimiento completado' : 'Seguimiento pendiente')
+      setSeguimientos(prev => prev.map(item => item.id === s.id ? { ...item, estado: nuevoEstado } : item))
+    }
   }
 
-  const activeLeds = useMemo(() => leads.filter((l) => !completed.has(l.id)), [leads, completed])
-
-  const vencidos = useMemo(() =>
-    sortByUrgency(activeLeds.filter((l) => l.next_followup_at && isPast(parseISO(l.next_followup_at)) && !isToday(parseISO(l.next_followup_at)))),
-    [activeLeds]
-  )
-
-  const hoy = useMemo(() =>
-    sortByUrgency(activeLeds.filter((l) => l.next_followup_at && isToday(parseISO(l.next_followup_at)))),
-    [activeLeds]
-  )
-
-  const proximos = useMemo(() =>
-    sortByUrgency(activeLeds.filter((l) => l.next_followup_at && isFuture(parseISO(l.next_followup_at)))),
-    [activeLeds]
-  )
-
-  const sinProgramar = useMemo(() =>
-    sortByUrgency(activeLeds.filter((l) => !l.next_followup_at)),
-    [activeLeds]
-  )
-
-  // Prospectos sin seguimiento que llevan 2+ días sin contacto (auto-detected)
-  const requierenSeguimiento = useMemo(() =>
-    sinProgramar.filter((l) => {
-      if (!l.last_contacted_at) return true
-      const days = differenceInDays(new Date(), parseISO(l.last_contacted_at))
-      return days >= 2
-    }),
-    [sinProgramar]
-  )
-
-  const totalUrgentes = vencidos.filter((l) => getUrgency(l).level === 'urgente').length +
-    hoy.filter((l) => getUrgency(l).level === 'urgente').length
+  async function handleDelete(id: string) {
+    if (!confirm('¿Estás seguro?')) return
+    const { error } = await supabase.from('seguimientos').delete().eq('id', id)
+    if (error) toast.error('Error al eliminar')
+    else {
+      toast.success('Seguimiento eliminado')
+      setSeguimientos(prev => prev.filter(s => s.id !== id))
+    }
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">Seguimientos</h1>
-        <p className="text-gray-400 text-sm mt-0.5">Ordenados por urgencia — priorizá lo que más importa hoy</p>
-      </div>
-
-      {/* Resumen */}
-      <div className="grid grid-cols-4 gap-3">
-        <StatCard
-          icon={<AlertTriangle className="w-4 h-4 text-red-400" />}
-          label="Vencidos"
-          value={vencidos.length}
-          bg="bg-red-900/20 border-red-700/40"
-          valueColor="text-red-400"
-          sub="Acción inmediata"
-        />
-        <StatCard
-          icon={<Bell className="w-4 h-4 text-yellow-400" />}
-          label="Para hoy"
-          value={hoy.length}
-          bg="bg-yellow-900/20 border-yellow-700/40"
-          valueColor="text-yellow-400"
-          sub="Contactar antes de las 19hs"
-        />
-        <StatCard
-          icon={<CalendarDays className="w-4 h-4 text-blue-400" />}
-          label="Próximos"
-          value={proximos.length}
-          bg="bg-gray-800/50 border-gray-700"
-          valueColor="text-blue-400"
-          sub="En los próximos días"
-        />
-        <StatCard
-          icon={<Flame className="w-4 h-4 text-orange-400" />}
-          label="Sin programar"
-          value={requierenSeguimiento.length}
-          bg={requierenSeguimiento.length > 0 ? 'bg-orange-900/20 border-orange-700/40' : 'bg-gray-800/50 border-gray-700'}
-          valueColor={requierenSeguimiento.length > 0 ? 'text-orange-400' : 'text-gray-400'}
-          sub="Detectados automáticamente"
-        />
-      </div>
-
-      {/* Secciones */}
-      <Seccion
-        titulo="Vencidos"
-        icono={<AlertTriangle className="w-4 h-4 text-red-400" />}
-        headerColor="text-red-400"
-        lista={vencidos}
-        msgVacio="Sin seguimientos vencidos — ¡vas bien!"
-        onReprogramar={reprogramar}
-        onMarcarHecho={marcarHecho}
-      />
-      <Seccion
-        titulo="Para hoy"
-        icono={<Bell className="w-4 h-4 text-yellow-400" />}
-        headerColor="text-yellow-400"
-        lista={hoy}
-        msgVacio="No tenés seguimientos para hoy"
-        onReprogramar={reprogramar}
-        onMarcarHecho={marcarHecho}
-      />
-      <Seccion
-        titulo="Próximos"
-        icono={<CalendarDays className="w-4 h-4 text-blue-400" />}
-        headerColor="text-blue-400"
-        lista={proximos}
-        msgVacio="No hay seguimientos próximos programados"
-        onReprogramar={reprogramar}
-        onMarcarHecho={marcarHecho}
+      <PageHeader
+        title="Seguimientos"
+        description="Programá tus próximos pasos para no perder ninguna oportunidad"
+        action={
+          <Button onClick={() => setShowForm(true)} className="bg-violet-600 hover:bg-violet-700 shadow-lg shadow-violet-900/20">
+            <Plus className="w-4 h-4 mr-2" /> Programar seguimiento
+          </Button>
+        }
       />
 
-      {requierenSeguimiento.length > 0 && (
-        <Seccion
-          titulo="Sin seguimiento — detectados automáticamente"
-          icono={<Flame className="w-4 h-4 text-orange-400" />}
-          headerColor="text-orange-400"
-          lista={requierenSeguimiento}
-          msgVacio=""
-          onReprogramar={reprogramar}
-          onMarcarHecho={marcarHecho}
-          subtitulo="Estos prospectos llevan 2+ días sin contacto y no tienen seguimiento programado"
-        />
-      )}
-    </div>
-  )
-}
-
-// ——— Stat card ———
-
-function StatCard({ icon, label, value, bg, valueColor, sub }: {
-  icon: React.ReactNode; label: string; value: number
-  bg: string; valueColor: string; sub: string
-}) {
-  return (
-    <Card className={`border ${bg}`}>
-      <CardContent className="pt-4 pb-4">
-        <div className="flex items-center gap-2 mb-1">{icon}<span className="text-xs text-gray-400">{label}</span></div>
-        <p className={`text-2xl font-bold ${valueColor}`}>{value}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{sub}</p>
-      </CardContent>
-    </Card>
-  )
-}
-
-// ——— Sección agrupada ———
-
-function Seccion({ titulo, icono, headerColor, lista, msgVacio, subtitulo, onReprogramar, onMarcarHecho }: {
-  titulo: string; icono: React.ReactNode; headerColor: string; lista: Lead[]
-  msgVacio: string; subtitulo?: string
-  onReprogramar: (id: string, days: number) => void
-  onMarcarHecho: (id: string) => void
-}) {
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-2">
-        {icono}
-        <h2 className={`text-sm font-semibold ${headerColor}`}>{titulo}</h2>
-        <span className="text-xs bg-gray-700 text-gray-300 rounded-full px-2 py-0.5 font-medium">{lista.length}</span>
-      </div>
-      {subtitulo && <p className="text-xs text-gray-500 mb-3 pl-6">{subtitulo}</p>}
-      {lista.length === 0 ? (
-        <p className="text-sm text-gray-500 pl-6">{msgVacio}</p>
-      ) : (
-        <div className="space-y-2">
-          {lista.map((l) => (
-            <TarjetaSeguimiento
-              key={l.id}
-              lead={l}
-              onReprogramar={onReprogramar}
-              onMarcarHecho={onMarcarHecho}
-            />
+      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-gray-900/50 p-4 rounded-xl border border-gray-800">
+        <div className="relative w-full md:max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Input
+            placeholder="Buscar por prospecto o título..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 bg-gray-800 border-gray-700 text-white"
+          />
+        </div>
+        <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+          {(['todos', 'hoy', 'vencidos', 'pendientes'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${
+                filter === f
+                  ? 'bg-violet-600 text-white border-violet-500 shadow-lg shadow-violet-900/20'
+                  : 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700 hover:text-white'
+              }`}
+            >
+              {f}
+            </button>
           ))}
         </div>
-      )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {loading ? (
+          <div className="col-span-full py-20 flex flex-col items-center gap-3">
+            <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+            <p className="text-gray-500">Cargando seguimientos...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="col-span-full py-20 text-center bg-gray-900/30 rounded-2xl border border-dashed border-gray-800">
+             <Bell className="w-10 h-10 text-gray-700 mx-auto mb-4" />
+             <p className="text-gray-500 font-medium">No tenés seguimientos para esta categoría</p>
+          </div>
+        ) : filtered.map((s) => {
+          const prospecto = (s as any).prospectos
+          const sDate = parseISO(s.fecha)
+          const vencido = isBefore(sDate, new Date()) && !isToday(sDate) && s.estado === 'pendiente'
+          const hoy = isToday(sDate) && s.estado === 'pendiente'
+
+          return (
+            <Card key={s.id} className={`bg-gray-800/40 border-gray-700 hover:border-gray-500 transition-all overflow-hidden ${s.estado === 'completado' ? 'opacity-60' : ''}`}>
+              <CardHeader className={`pb-3 border-b border-gray-700/50 ${vencido ? 'bg-red-900/10' : hoy ? 'bg-yellow-900/10' : 'bg-gray-900/30'}`}>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${s.estado === 'completado' ? 'bg-green-900/20 text-green-400' : vencido ? 'bg-red-900/20 text-red-400' : 'bg-violet-900/20 text-violet-400'}`}>
+                      {s.estado === 'completado' ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-bold text-white line-clamp-1">{s.titulo}</CardTitle>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Calendar className="w-3 h-3 text-gray-500" />
+                        <span className={`text-[10px] font-bold uppercase tracking-tight ${vencido ? 'text-red-400' : hoy ? 'text-yellow-400' : 'text-gray-500'}`}>
+                          {format(sDate, "d 'de' MMM, HH:mm", { locale: es })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => handleDelete(s.id)} className="p-1.5 text-gray-500 hover:text-red-400 transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-3">
+                <Link href={`/prospectos/${prospecto?.id}`} className="block group">
+                  <div className="flex items-center justify-between p-2.5 bg-gray-900/50 rounded-xl border border-gray-800 group-hover:border-violet-500/30 transition-all">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-white group-hover:text-violet-400 transition-colors truncate">{prospecto?.nombre}</p>
+                      <p className="text-[10px] text-gray-500 font-medium truncate">{prospecto?.negocio}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-700 group-hover:text-violet-500 transition-colors" />
+                  </div>
+                </Link>
+
+                <p className="text-xs text-gray-400 leading-relaxed italic line-clamp-2">
+                  {s.descripcion || 'Sin descripción adicional'}
+                </p>
+              </CardContent>
+              <CardFooter className="pt-3 border-t border-gray-700/50 bg-gray-900/20">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => handleToggleEstado(s)}
+                  className={`w-full h-9 text-[10px] font-bold uppercase tracking-widest gap-2 ${
+                    s.estado === 'completado' 
+                      ? 'text-gray-500 hover:text-white' 
+                      : 'text-violet-400 hover:text-white hover:bg-violet-600 shadow-sm'
+                  }`}
+                >
+                  {s.estado === 'completado' ? (
+                    <> <XCircle className="w-3 h-3" /> Marcar como pendiente </>
+                  ) : (
+                    <> <CheckCircle2 className="w-3 h-3" /> Marcar como completado </>
+                  )}
+                </Button>
+              </CardFooter>
+            </Card>
+          )
+        })}
+      </div>
+
+      <SeguimientoFormDialog
+        open={showForm}
+        onOpenChange={setShowForm}
+        prospectos={prospectos}
+        onSave={fetchData}
+      />
     </div>
   )
 }
 
-// ——— Tarjeta individual ———
+function SeguimientoFormDialog({ open, onOpenChange, prospectos, onSave }: { open: boolean, onOpenChange: (o: boolean) => void, prospectos: Prospecto[], onSave: () => void }) {
+  const [loading, setLoading] = useState(false)
+  const supabase = createClient()
+  const [formData, setFormData] = useState({
+    prospecto_id: '',
+    titulo: '',
+    descripcion: '',
+    fecha: '',
+    hora: '10:00'
+  })
 
-function TarjetaSeguimiento({ lead, onReprogramar, onMarcarHecho }: {
-  lead: Lead
-  onReprogramar: (id: string, days: number) => void
-  onMarcarHecho: (id: string) => void
-}) {
-  const urgency = getUrgency(lead)
-  const todayStr = new Date().toISOString().split('T')[0]
-  const lastContactDays = lead.last_contacted_at
-    ? differenceInDays(new Date(), parseISO(lead.last_contacted_at))
-    : null
+  useEffect(() => {
+    if (open) setFormData({ prospecto_id: '', titulo: '', descripcion: '', fecha: format(new Date(), 'yyyy-MM-dd'), hora: '10:00' })
+  }, [open])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const combinedDate = new Date(`${formData.fecha}T${formData.hora}:00`).toISOString()
+      
+      const { error } = await supabase.from('seguimientos').insert([{
+        prospecto_id: formData.prospecto_id,
+        user_id: user?.id,
+        titulo: formData.titulo,
+        descripcion: formData.descripcion,
+        fecha: combinedDate,
+        estado: 'pendiente'
+      }])
+      
+      if (error) throw error
+      toast.success('Seguimiento programado')
+      onSave()
+      onOpenChange(false)
+    } catch (err: any) {
+      toast.error(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
-    <div className="p-4 rounded-lg border border-gray-700 bg-gray-800/50 hover:border-gray-600 transition-colors">
-      <div className="flex items-start gap-4">
-        {/* Info principal */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <Link href={`/prospectos/${lead.id}`} className="text-sm font-semibold text-white hover:text-violet-400 transition-colors">
-              {lead.name}
-            </Link>
-            {/* Urgency tag */}
-            <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${urgency.bg} ${urgency.text} ${urgency.border}`}>
-              {urgency.icon} {urgency.label}
-            </span>
-            <LeadStatusBadge status={lead.status} />
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-gray-900 border-gray-800 text-white sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>Programar Seguimiento</DialogTitle>
+          <DialogDescription className="text-gray-400">No dejes que se enfríe la relación con el prospecto.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>Prospecto</Label>
+            <Select value={formData.prospecto_id} onValueChange={v => setFormData({ ...formData, prospecto_id: v || '' })}>
+              <SelectTrigger className="bg-gray-800 border-gray-700">
+                <SelectValue placeholder="Seleccionar prospecto" />
+              </SelectTrigger>
+              <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                {prospectos.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre} ({p.negocio})</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-
-          <p className="text-xs text-gray-400">{lead.business_name} · {lead.niche} · {lead.city}</p>
-
-          {/* Métricas clave */}
-          <div className="flex items-center gap-4 mt-2 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <InterestStars level={lead.interest_level} />
+          <div className="space-y-2">
+            <Label>Título / Acción</Label>
+            <Input value={formData.titulo} onChange={e => setFormData({ ...formData, titulo: e.target.value })} className="bg-gray-800 border-gray-700" placeholder="Ej: Llamada de cierre" required />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Fecha</Label>
+              <Input type="date" value={formData.fecha} onChange={e => setFormData({ ...formData, fecha: e.target.value })} className="bg-gray-800 border-gray-700" required />
             </div>
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <Clock className="w-3 h-3" />
-              {lastContactDays === null
-                ? <span className="text-orange-400">Sin contacto previo</span>
-                : lastContactDays === 0
-                ? <span className="text-green-400">Contactado hoy</span>
-                : lastContactDays === 1
-                ? <span className="text-yellow-400">Hace 1 día</span>
-                : <span className={lastContactDays >= 5 ? 'text-blue-400' : lastContactDays >= 2 ? 'text-red-400' : 'text-gray-400'}>
-                    Hace {lastContactDays} días
-                  </span>
-              }
+            <div className="space-y-2">
+              <Label>Hora</Label>
+              <Input type="time" value={formData.hora} onChange={e => setFormData({ ...formData, hora: e.target.value })} className="bg-gray-800 border-gray-700" required />
             </div>
-            {lead.next_followup_at && (
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <CalendarDays className="w-3 h-3" />
-                <span>
-                  {isToday(parseISO(lead.next_followup_at))
-                    ? <span className="text-yellow-400">Hoy</span>
-                    : isPast(parseISO(lead.next_followup_at))
-                    ? <span className="text-red-400">Vencido el {format(parseISO(lead.next_followup_at), 'd MMM', { locale: es })}</span>
-                    : <span className="text-gray-400">{format(parseISO(lead.next_followup_at), "d 'de' MMM", { locale: es })}</span>
-                  }
-                </span>
-              </div>
-            )}
-            {lead.score > 0 && (
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <span>Score: <span className="text-white font-medium">{lead.score}</span></span>
-              </div>
-            )}
           </div>
-
-          {/* Contacto rápido */}
-          <div className="flex items-center gap-3 mt-2">
-            {lead.whatsapp && (
-              <a
-                href={`https://wa.me/${lead.whatsapp.replace(/\D/g, '')}`}
-                target="_blank" rel="noreferrer"
-                className="flex items-center gap-1 text-xs text-green-400 hover:text-green-300 transition-colors"
-              >
-                <Phone className="w-3 h-3" /> WhatsApp
-              </a>
-            )}
-            {lead.instagram && (
-              <a
-                href={`https://instagram.com/${lead.instagram.replace('@', '')}`}
-                target="_blank" rel="noreferrer"
-                className="flex items-center gap-1 text-xs text-pink-400 hover:text-pink-300 transition-colors"
-              >
-                <AtSign className="w-3 h-3" /> {lead.instagram}
-              </a>
-            )}
+          <div className="space-y-2">
+            <Label>Notas</Label>
+            <Textarea value={formData.descripcion} onChange={e => setFormData({ ...formData, descripcion: e.target.value })} className="bg-gray-800 border-gray-700" placeholder="Detalles de lo que hay que hablar..." />
           </div>
-
-          {lead.notes && (
-            <p className="text-xs text-gray-500 mt-1.5 italic truncate max-w-lg">&ldquo;{lead.notes}&rdquo;</p>
-          )}
-        </div>
-
-        {/* Acciones rápidas */}
-        <div className="shrink-0 flex flex-col gap-1.5 items-end">
-          {/* Fila 1: abrir ficha + marcar hecho */}
-          <div className="flex items-center gap-1.5">
-            <Link href={`/prospectos/${lead.id}`}>
-              <Button size="sm" variant="outline" className="h-7 text-xs border-gray-600 text-gray-300 hover:border-violet-500 hover:text-violet-300 gap-1">
-                Ver ficha <ChevronRight className="w-3 h-3" />
-              </Button>
-            </Link>
-            <Button
-              size="sm"
-              onClick={() => onMarcarHecho(lead.id)}
-              className="h-7 text-xs bg-violet-600 hover:bg-violet-700 gap-1"
-            >
-              <CheckCircle2 className="w-3 h-3" /> Hecho
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button type="submit" disabled={loading || !formData.prospecto_id} className="bg-violet-600 hover:bg-violet-700">
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Programar
             </Button>
-          </div>
-
-          {/* Fila 2: reprogramar */}
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-gray-600 mr-0.5">Reprog.:</span>
-            <Button
-              size="sm" variant="outline"
-              onClick={() => onReprogramar(lead.id, 1)}
-              className="h-6 text-xs px-2 border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-300"
-            >
-              +1 día
-            </Button>
-            <Button
-              size="sm" variant="outline"
-              onClick={() => onReprogramar(lead.id, 3)}
-              className="h-6 text-xs px-2 border-gray-700 text-gray-400 hover:border-yellow-600 hover:text-yellow-300"
-            >
-              +3 días
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

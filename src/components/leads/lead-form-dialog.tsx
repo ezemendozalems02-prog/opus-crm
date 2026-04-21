@@ -1,162 +1,295 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { Lead, LeadStatus } from '@/lib/types'
-import { mockNiches } from '@/lib/mock-data'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
+import type { Prospecto, Rubro, LeadStatus } from '@/lib/types'
+import { Loader2 } from 'lucide-react'
 
-interface Props {
+interface ProspectoFormDialogProps {
   open: boolean
-  onOpenChange: (v: boolean) => void
-  lead?: Lead
-  onSave: (data: Partial<Lead>) => void
+  onOpenChange: (open: boolean) => void
+  lead?: Prospecto
+  onSave: () => void
 }
 
-const defaultForm = {
-  name: '', business_name: '', niche: '', city: '', instagram: '',
-  whatsapp: '', website: '', status: 'new' as LeadStatus,
-  interest_level: 3, score: 50, last_contacted_at: '', next_followup_at: '',
-}
+export function ProspectoFormDialog({
+  open,
+  onOpenChange,
+  lead,
+  onSave,
+}: ProspectoFormDialogProps) {
+  const [loading, setLoading] = useState(false)
+  const [rubros, setRubros] = useState<Rubro[]>([])
+  const supabase = createClient()
 
-const ESTADOS: { value: LeadStatus; label: string }[] = [
-  { value: 'new', label: 'Nuevo' },
-  { value: 'contacted', label: 'Contactado' },
-  { value: 'replied', label: 'Respondió' },
-  { value: 'interested', label: 'Interesado' },
-  { value: 'meeting', label: 'Reunión' },
-  { value: 'proposal', label: 'Propuesta' },
-  { value: 'won', label: 'Ganado' },
-  { value: 'lost', label: 'Perdido' },
-]
-
-export function ProspectoFormDialog({ open, onOpenChange, lead, onSave }: Props) {
-  const [form, setForm] = useState(defaultForm)
+  const [formData, setFormData] = useState<Partial<Prospecto>>({
+    nombre: '',
+    negocio: '',
+    rubro_id: '',
+    ciudad: '',
+    instagram: '',
+    whatsapp: '',
+    sitio_web: '',
+    estado: 'Nuevo',
+    nivel_interes: 1,
+    notas: '',
+  })
 
   useEffect(() => {
     if (lead) {
-      setForm({
-        name: lead.name,
-        business_name: lead.business_name,
-        niche: lead.niche,
-        city: lead.city,
-        instagram: lead.instagram,
-        whatsapp: lead.whatsapp,
-        website: lead.website,
-        status: lead.status,
-        interest_level: lead.interest_level,
-        score: lead.score,
-        last_contacted_at: lead.last_contacted_at || '',
-        next_followup_at: lead.next_followup_at || '',
+      setFormData({
+        nombre: lead.nombre,
+        negocio: lead.negocio,
+        rubro_id: lead.rubro_id || '',
+        ciudad: lead.ciudad || '',
+        instagram: lead.instagram || '',
+        whatsapp: lead.whatsapp || '',
+        sitio_web: lead.sitio_web || '',
+        estado: lead.estado,
+        nivel_interes: lead.nivel_interes,
+        notas: lead.notas || '',
       })
     } else {
-      setForm(defaultForm)
+      setFormData({
+        nombre: '',
+        negocio: '',
+        rubro_id: '',
+        ciudad: '',
+        instagram: '',
+        whatsapp: '',
+        sitio_web: '',
+        estado: 'Nuevo',
+        nivel_interes: 1,
+        notas: '',
+      })
     }
   }, [lead, open])
 
-  function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    async function fetchRubros() {
+      const { data } = await supabase.from('rubros').select('*').order('nombre')
+      if (data) setRubros(data)
+    }
+    if (open) fetchRubros()
+  }, [open, supabase])
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    onSave({
-      ...form,
-      last_contacted_at: form.last_contacted_at || null,
-      next_followup_at: form.next_followup_at || null,
-    })
+    setLoading(true)
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No hay sesión activa')
+
+      const payload = {
+        ...formData,
+        user_id: user.id,
+        rubro_id: formData.rubro_id === '' ? null : formData.rubro_id,
+      }
+
+      if (lead) {
+        const { error } = await supabase
+          .from('prospectos')
+          .update(payload)
+          .eq('id', lead.id)
+        if (error) throw error
+        toast.success('Prospecto actualizado')
+      } else {
+        const { error } = await supabase.from('prospectos').insert([payload])
+        if (error) throw error
+        toast.success('Prospecto creado')
+      }
+      onSave()
+    } catch (error: any) {
+      toast.error(error.message || 'Error al guardar')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[600px] bg-gray-900 border-gray-800 text-white max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{lead ? 'Editar prospecto' : 'Nuevo prospecto'}</DialogTitle>
+          <DialogTitle className="text-xl font-bold">
+            {lead ? 'Editar Prospecto' : 'Nuevo Prospecto'}
+          </DialogTitle>
+          <DialogDescription className="text-gray-400">
+            Completá los datos del negocio para dar seguimiento.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+
+        <form onSubmit={handleSubmit} className="space-y-6 py-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Nombre *</Label>
-              <Input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="bg-gray-800 border-gray-700" placeholder="Nombre del contacto" />
+            <div className="space-y-2">
+              <Label htmlFor="nombre" className="text-gray-300">Nombre del contacto</Label>
+              <Input
+                id="nombre"
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                className="bg-gray-800 border-gray-700 text-white focus:border-violet-500"
+                required
+              />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Negocio</Label>
-              <Input value={form.business_name} onChange={(e) => setForm({ ...form, business_name: e.target.value })}
-                className="bg-gray-800 border-gray-700" placeholder="Nombre del negocio" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Rubro</Label>
-              <Select value={form.niche} onValueChange={(v) => setForm({ ...form, niche: v ?? '' })}>
-                <SelectTrigger className="bg-gray-800 border-gray-700"><SelectValue placeholder="Seleccionar rubro" /></SelectTrigger>
-                <SelectContent className="bg-gray-800 border-gray-700">
-                  {mockNiches.map((n) => <SelectItem key={n.id} value={n.name}>{n.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Ciudad</Label>
-              <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="bg-gray-800 border-gray-700" placeholder="CABA, Pilar, Rosario..." />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Instagram</Label>
-              <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })}
-                className="bg-gray-800 border-gray-700" placeholder="@usuario" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">WhatsApp</Label>
-              <Input value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                className="bg-gray-800 border-gray-700" placeholder="+549111234567" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Sitio web</Label>
-              <Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })}
-                className="bg-gray-800 border-gray-700" placeholder="sitio.com.ar" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Estado</Label>
-              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: (v ?? 'new') as LeadStatus })}>
-                <SelectTrigger className="bg-gray-800 border-gray-700"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-gray-800 border-gray-700">
-                  {ESTADOS.map((e) => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Nivel de interés (1-5)</Label>
-              <Input type="number" min={1} max={5} value={form.interest_level}
-                onChange={(e) => setForm({ ...form, interest_level: Number(e.target.value) })}
-                className="bg-gray-800 border-gray-700" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Score (0-100)</Label>
-              <Input type="number" min={0} max={100} value={form.score}
-                onChange={(e) => setForm({ ...form, score: Number(e.target.value) })}
-                className="bg-gray-800 border-gray-700" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Último contacto</Label>
-              <Input type="date" value={form.last_contacted_at}
-                onChange={(e) => setForm({ ...form, last_contacted_at: e.target.value })}
-                className="bg-gray-800 border-gray-700" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Próximo seguimiento</Label>
-              <Input type="date" value={form.next_followup_at}
-                onChange={(e) => setForm({ ...form, next_followup_at: e.target.value })}
-                className="bg-gray-800 border-gray-700" />
+            <div className="space-y-2">
+              <Label htmlFor="negocio" className="text-gray-300">Nombre del negocio</Label>
+              <Input
+                id="negocio"
+                value={formData.negocio}
+                onChange={(e) => setFormData({ ...formData, negocio: e.target.value })}
+                className="bg-gray-800 border-gray-700 text-white focus:border-violet-500"
+                required
+              />
             </div>
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="border-gray-700 text-gray-300">Cancelar</Button>
-            <Button type="submit" className="bg-violet-600 hover:bg-violet-700">
-              {lead ? 'Guardar cambios' : 'Crear prospecto'}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="rubro" className="text-gray-300">Rubro</Label>
+              <Select
+                value={formData.rubro_id || 'none'}
+                onValueChange={(val) => setFormData({ ...formData, rubro_id: val === 'none' ? '' : val })}
+              >
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue placeholder="Seleccionar rubro" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                  <SelectItem value="none">Sin rubro</SelectItem>
+                  {rubros.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ciudad" className="text-gray-300">Ciudad / Zona</Label>
+              <Input
+                id="ciudad"
+                value={formData.ciudad || ''}
+                onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
+                className="bg-gray-800 border-gray-700 text-white focus:border-violet-500"
+                placeholder="Ej: Córdoba Capital"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="instagram" className="text-gray-300">Instagram</Label>
+              <Input
+                id="instagram"
+                value={formData.instagram || ''}
+                onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
+                className="bg-gray-800 border-gray-700 text-white focus:border-violet-500"
+                placeholder="@usuario"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="whatsapp" className="text-gray-300">WhatsApp</Label>
+              <Input
+                id="whatsapp"
+                value={formData.whatsapp || ''}
+                onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
+                className="bg-gray-800 border-gray-700 text-white focus:border-violet-500"
+                placeholder="Ej: 3511234567"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="estado" className="text-gray-300">Estado inicial</Label>
+              <Select
+                value={formData.estado}
+                onValueChange={(val: any) => setFormData({ ...formData, estado: val || 'Nuevo' })}
+              >
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                  <SelectItem value="Nuevo">Nuevo</SelectItem>
+                  <SelectItem value="Contactado">Contactado</SelectItem>
+                  <SelectItem value="Respondió">Respondió</SelectItem>
+                  <SelectItem value="Interesado">Interesado</SelectItem>
+                  <SelectItem value="Reunión">Reunión</SelectItem>
+                  <SelectItem value="Propuesta">Propuesta</SelectItem>
+                  <SelectItem value="Ganado">Ganado</SelectItem>
+                  <SelectItem value="Perdido">Perdido</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="interes" className="text-gray-300">Nivel de interés (1-5)</Label>
+              <Select
+                value={String(formData.nivel_interes)}
+                onValueChange={(val) => setFormData({ ...formData, nivel_interes: Number(val) })}
+              >
+                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <SelectItem key={n} value={String(n)}>{n} Estrellas</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="notas" className="text-gray-300">Notas internas</Label>
+            <Textarea
+              id="notas"
+              value={formData.notas || ''}
+              onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
+              className="bg-gray-800 border-gray-700 text-white focus:border-violet-500 h-24"
+              placeholder="Anotá detalles relevantes de la conversación..."
+            />
+          </div>
+
+          <DialogFooter className="pt-4 border-t border-gray-800">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              className="text-gray-400 hover:text-white hover:bg-gray-800"
+              disabled={loading}
+            >
+              Cancelar
             </Button>
-          </div>
+            <Button
+              type="submit"
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : null}
+              {lead ? 'Guardar Cambios' : 'Crear Prospecto'}
+            </Button>
+          </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+    </DialogContent>
+  </Dialog>
   )
 }
-
-export { ProspectoFormDialog as LeadFormDialog }

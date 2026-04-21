@@ -1,17 +1,17 @@
-import type { Lead, LeadStatus } from './types'
+import type { Prospecto, LeadStatus } from './types'
 import { differenceInDays, parseISO } from 'date-fns'
 
 // ——— Score rules ———
 
-const STATUS_BASE: Partial<Record<LeadStatus, number>> = {
-  new: 0,
-  contacted: 0,
-  replied: 15,        // respondió
-  interested: 40,     // respondió (+15) + pidió precio (+25)
-  meeting: 70,        // anterior + aceptó reunión (+30)
-  proposal: 100,      // anterior + pidió propuesta (+40) → capped 100
-  won: 100,
-  lost: 0,
+const STATUS_BASE: Record<LeadStatus, number> = {
+  'Nuevo': 0,
+  'Contactado': 0,
+  'Respondió': 15,
+  'Interesado': 40,
+  'Reunión': 70,
+  'Propuesta': 100,
+  'Ganado': 100,
+  'Perdido': 0,
 }
 
 export interface ScoreBreakdown {
@@ -21,34 +21,38 @@ export interface ScoreBreakdown {
   reasons: { label: string; value: number }[]
 }
 
-export function computeScoreBreakdown(lead: Lead): ScoreBreakdown {
-  const base = STATUS_BASE[lead.status] ?? 0
+export function computeScoreBreakdown(lead: Prospecto): ScoreBreakdown {
+  const base = STATUS_BASE[lead.estado] ?? 0
   const reasons: { label: string; value: number }[] = []
 
-  if (base > 0 && lead.status !== 'won') {
-    if (lead.status === 'replied') reasons.push({ label: 'Respondió', value: 15 })
-    if (['interested', 'meeting', 'proposal'].includes(lead.status)) {
+  if (base > 0 && lead.estado !== 'Ganado') {
+    if (lead.estado === 'Respondió') reasons.push({ label: 'Respondió', value: 15 })
+    if (['Interesado', 'Reunión', 'Propuesta'].includes(lead.estado)) {
       reasons.push({ label: 'Respondió', value: 15 })
       reasons.push({ label: 'Pidió precio', value: 25 })
     }
-    if (['meeting', 'proposal'].includes(lead.status)) {
+    if (['Reunión', 'Propuesta'].includes(lead.estado)) {
       reasons.push({ label: 'Aceptó reunión', value: 30 })
     }
-    if (lead.status === 'proposal') {
+    if (lead.estado === 'Propuesta') {
       reasons.push({ label: 'Pidió propuesta', value: 30 })
     }
   }
-  if (lead.status === 'won') reasons.push({ label: 'Cliente cerrado', value: 100 })
+  if (lead.estado === 'Ganado') reasons.push({ label: 'Cliente cerrado', value: 100 })
 
   let penalty = 0
-  if (lead.last_contacted_at && !['won', 'lost'].includes(lead.status)) {
-    const days = differenceInDays(new Date(), parseISO(lead.last_contacted_at))
-    if (days >= 7) {
-      penalty = 20
-      reasons.push({ label: 'Sin respuesta 7+ días', value: -20 })
-    } else if (days >= 3) {
-      penalty = 10
-      reasons.push({ label: 'Sin respuesta 3+ días', value: -10 })
+  if (lead.ultimo_contacto && !['Ganado', 'Perdido'].includes(lead.estado)) {
+    try {
+      const days = differenceInDays(new Date(), parseISO(lead.ultimo_contacto))
+      if (days >= 7) {
+        penalty = 20
+        reasons.push({ label: 'Sin respuesta 7+ días', value: -20 })
+      } else if (days >= 3) {
+        penalty = 10
+        reasons.push({ label: 'Sin respuesta 3+ días', value: -10 })
+      }
+    } catch {
+      // Ignore parse errors
     }
   }
 
@@ -56,7 +60,7 @@ export function computeScoreBreakdown(lead: Lead): ScoreBreakdown {
   return { base, penalty, total, reasons }
 }
 
-export function computeScore(lead: Lead): number {
+export function computeScore(lead: Prospecto): number {
   return computeScoreBreakdown(lead).total
 }
 

@@ -1,8 +1,8 @@
 import { computeScore, getScoreTier } from '@/lib/score'
-import type { Lead } from '@/lib/types'
+import type { Prospecto } from '@/lib/types'
 
 interface Props {
-  lead: Lead
+  lead: Prospecto
   showLabel?: boolean
   showBar?: boolean
   size?: 'sm' | 'md'
@@ -38,7 +38,7 @@ export function ScoreBadge({ lead, showLabel = true, showBar = false, size = 'sm
 }
 
 // Compact version: just the number with color, for tight spaces like Kanban
-export function ScoreChip({ lead }: { lead: Lead }) {
+export function ScoreChip({ lead }: { lead: Prospecto }) {
   const score = computeScore(lead)
   const tier = getScoreTier(score)
   return (

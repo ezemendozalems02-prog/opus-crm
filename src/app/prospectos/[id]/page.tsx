@@ -1,27 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { LeadStatusBadge } from '@/components/leads/lead-status-badge'
 import { InterestStars } from '@/components/leads/interest-stars'
-import { mockLeads, mockActivities } from '@/lib/mock-data'
-import type { Activity, LeadStatus } from '@/lib/types'
-import { STATUS_LABELS } from '@/lib/types'
+import type { Prospecto, ActividadProspecto, LeadStatus, Rubro, Seguimiento } from '@/lib/types'
 import { computeScoreBreakdown, getScoreTier } from '@/lib/score'
 import {
   AtSign, Phone, Globe, MapPin, Calendar, ArrowLeft,
   MessageSquare, Reply, Clock, FileText, CheckCircle2, Plus,
-  AlertTriangle, Star, ChevronRight, StickyNote
+  AlertTriangle, Star, ChevronRight, StickyNote, Loader2, Zap, Trash2, XCircle
 } from 'lucide-react'
 import Link from 'next/link'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { format, formatDistanceToNow, isPast, isToday, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 
-const TIPO_LABELS: Record<Activity['type'], string> = {
+const TIPO_LABELS: Record<string, string> = {
   message_sent: 'Mensaje enviado',
   reply_received: 'Respondió',
   call: 'Llamada',
@@ -30,7 +31,7 @@ const TIPO_LABELS: Record<Activity['type'], string> = {
   status_change: 'Cambio de estado',
 }
 
-const activityIcons: Record<Activity['type'], React.ReactNode> = {
+const activityIcons: Record<string, React.ReactNode> = {
   message_sent: <MessageSquare className="w-4 h-4 text-blue-400" />,
   reply_received: <Reply className="w-4 h-4 text-green-400" />,
   call: <Phone className="w-4 h-4 text-purple-400" />,
@@ -40,21 +41,21 @@ const activityIcons: Record<Activity['type'], React.ReactNode> = {
 }
 
 const STATUS_PROGRESSION: Partial<Record<LeadStatus, LeadStatus>> = {
-  new: 'contacted',
-  contacted: 'replied',
-  replied: 'interested',
-  interested: 'meeting',
-  meeting: 'proposal',
-  proposal: 'won',
+  'Nuevo': 'Contactado',
+  'Contactado': 'Respondió',
+  'Respondió': 'Interesado',
+  'Interesado': 'Reunión',
+  'Reunión': 'Propuesta',
+  'Propuesta': 'Ganado',
 }
 
 const STATUS_ACTION_LABEL: Partial<Record<LeadStatus, string>> = {
-  new: 'Marcar como contactado',
-  contacted: 'Marcar que respondió',
-  replied: 'Marcar como interesado',
-  interested: 'Registrar reunión',
-  meeting: 'Enviar propuesta',
-  proposal: 'Marcar como ganado',
+  'Nuevo': 'Marcar como contactado',
+  'Contactado': 'Marcar que respondió',
+  'Respondió': 'Marcar como interesado',
+  'Interesado': 'Registrar reunión',
+  'Reunión': 'Enviar propuesta',
+  'Propuesta': 'Marcar como ganado',
 }
 
 function formatFecha(dateStr: string | null): string | null {
@@ -66,466 +67,404 @@ function formatFecha(dateStr: string | null): string | null {
   }
 }
 
-function getFollowupStatus(dateStr: string | null): { label: string; color: string; icon: React.ReactNode } | null {
-  if (!dateStr) return null
-  try {
-    const date = parseISO(dateStr)
-    if (isToday(date)) return {
-      label: 'Hoy',
-      color: 'text-yellow-400',
-      icon: <AlertTriangle className="w-3.5 h-3.5 text-yellow-400" />,
-    }
-    if (isPast(date)) return {
-      label: `Vencido (${formatDistanceToNow(date, { locale: es, addSuffix: true })})`,
-      color: 'text-red-400',
-      icon: <AlertTriangle className="w-3.5 h-3.5 text-red-400" />,
-    }
-    return {
-      label: format(date, "d 'de' MMM", { locale: es }),
-      color: 'text-green-400',
-      icon: <Calendar className="w-3.5 h-3.5 text-green-400" />,
-    }
-  } catch {
-    return null
-  }
-}
-
 export default function ProspectoDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const originalLead = mockLeads.find((l) => l.id === params.id)
+  const supabase = createClient()
 
-  const [lead, setLead] = useState(originalLead)
-  const [activities, setActivities] = useState<Activity[]>(
-    mockActivities.filter((a) => a.lead_id === params.id)
-  )
+  const [lead, setLead] = useState<Prospecto | null>(null)
+  const [activities, setActivities] = useState<ActividadProspecto[]>([])
+  const [loading, setLoading] = useState(true)
   const [noteText, setNoteText] = useState('')
   const [noteOpen, setNoteOpen] = useState(false)
   const [followupOpen, setFollowupOpen] = useState(false)
-  const [followupDate, setFollowupDate] = useState(lead?.next_followup_at ?? '')
-  const [activityType, setActivityType] = useState<Activity['type']>('message_sent')
+  const [followupDate, setFollowupDate] = useState('')
+  const [activityType, setActivityType] = useState('message_sent')
   const [activityDesc, setActivityDesc] = useState('')
 
-  if (!lead) {
+  const fetchData = async () => {
+    setLoading(true)
+    const { data: pData } = await supabase.from('prospectos').select('*, rubros(*)').eq('id', params.id).single()
+    const { data: aData } = await supabase.from('actividades_prospecto').select('*').eq('prospecto_id', params.id).order('created_at', { ascending: false })
+    
+    if (pData) {
+      setLead(pData)
+      setFollowupDate(pData.proximo_seguimiento?.split('T')[0] || '')
+    }
+    if (aData) setActivities(aData)
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [params.id, supabase])
+
+  if (loading) {
     return (
-      <div className="text-center py-20">
-        <p className="text-gray-400">Prospecto no encontrado</p>
-        <Link href="/prospectos" className="text-violet-400 hover:text-violet-300 mt-2 inline-block">← Volver a prospectos</Link>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+        <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+        <p className="text-gray-500 text-sm">Cargando ficha del prospecto...</p>
       </div>
     )
   }
 
-  function pushActivity(type: Activity['type'], description: string) {
-    const act: Activity = {
-      id: String(Date.now()),
-      lead_id: lead!.id,
-      type,
-      description,
-      created_at: new Date().toISOString(),
-    }
-    setActivities((prev) => [act, ...prev])
+  if (!lead) {
+    return (
+      <div className="text-center py-20 bg-gray-900/30 rounded-2xl border border-gray-800 m-6">
+        <XCircle className="w-12 h-12 text-gray-700 mx-auto mb-4" />
+        <p className="text-gray-400 font-bold uppercase tracking-widest">Prospecto no encontrado</p>
+        <Link href="/prospectos" className="text-violet-400 hover:text-violet-300 mt-4 inline-block font-medium">← Volver a prospectos</Link>
+      </div>
+    )
   }
 
-  function avanzarEstado() {
-    const next = STATUS_PROGRESSION[lead!.status]
+  async function pushActivity(type: string, description: string) {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data, error } = await supabase.from('actividades_prospecto').insert({
+      prospecto_id: lead!.id,
+      user_id: user?.id,
+      tipo: type,
+      contenido: description
+    }).select().single()
+
+    if (data) setActivities([data, ...activities])
+    return { data, error }
+  }
+
+  async function avanzarEstado() {
+    const next = STATUS_PROGRESSION[lead!.estado]
     if (!next) return
-    setLead((prev) => prev ? { ...prev, status: next, last_contacted_at: new Date().toISOString().split('T')[0] } : prev)
-    pushActivity('status_change', `Estado actualizado a "${STATUS_LABELS[next]}"`)
+    
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('prospectos').update({
+      estado: next,
+      ultimo_contacto: now
+    }).eq('id', lead!.id)
+
+    if (!error) {
+      setLead({ ...lead!, estado: next, ultimo_contacto: now })
+      await pushActivity('status_change', `Estado actualizado a "${next}"`)
+      toast.success(`Estado: ${next}`)
+    }
   }
 
-  function guardarSeguimiento() {
+  async function guardarSeguimiento() {
     if (!followupDate) return
-    setLead((prev) => prev ? { ...prev, next_followup_at: followupDate } : prev)
-    pushActivity('note', `Seguimiento programado para ${formatFecha(followupDate)}`)
-    setFollowupOpen(false)
+    const { data: { user } } = await supabase.auth.getUser()
+    const fechaISO = new Date(followupDate + 'T10:00:00').toISOString()
+
+    const { error } = await supabase.from('seguimientos').insert({
+      prospecto_id: lead!.id,
+      user_id: user?.id,
+      titulo: 'Seguimiento programado',
+      descripcion: 'Agendado desde la ficha del prospecto',
+      fecha: fechaISO,
+      estado: 'pendiente'
+    })
+
+    if (!error) {
+      await supabase.from('prospectos').update({ proximo_seguimiento: fechaISO }).eq('id', lead!.id)
+      setLead({ ...lead!, proximo_seguimiento: fechaISO })
+      await pushActivity('note', `Seguimiento programado para ${format(parseISO(fechaISO), "d 'de' MMM", { locale: es })}`)
+      setFollowupOpen(false)
+      toast.success('Seguimiento agendado')
+    }
   }
 
-  function guardarNota() {
+  async function guardarNota() {
     if (!noteText.trim()) return
-    pushActivity('note', noteText.trim())
+    await pushActivity('note', noteText.trim())
     setNoteText('')
     setNoteOpen(false)
+    toast.success('Nota guardada')
   }
 
-  function registrarActividad() {
+  async function registrarActividad() {
     if (!activityDesc.trim()) return
-    pushActivity(activityType, activityDesc.trim())
+    await pushActivity(activityType, activityDesc.trim())
     setActivityDesc('')
+    toast.success('Actividad registrada')
   }
 
-  const nextStatusLabel = STATUS_ACTION_LABEL[lead.status]
-  const followupStatus = getFollowupStatus(lead.next_followup_at)
-  const scoreBreakdown = computeScoreBreakdown(lead)
+  const nextStatusLabel = STATUS_ACTION_LABEL[lead.estado]
+  const scoreBreakdown = computeScoreBreakdown(lead as any)
   const tier = getScoreTier(scoreBreakdown.total)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-3">
-        <button onClick={() => router.back()} className="text-gray-400 hover:text-white transition-colors mt-1 shrink-0">
+      <div className="flex items-start gap-4">
+        <button onClick={() => router.back()} className="p-2 bg-gray-800 border border-gray-700 rounded-xl text-gray-400 hover:text-white hover:border-gray-500 transition-all shrink-0">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-white">{lead.name}</h1>
-            <LeadStatusBadge status={lead.status} />
+            <h1 className="text-3xl font-black text-white tracking-tight">{lead.nombre}</h1>
+            <LeadStatusBadge status={lead.estado} />
           </div>
-          <div className="flex items-center gap-3 mt-1 text-sm text-gray-400 flex-wrap">
-            <span>{lead.business_name}</span>
-            <span className="text-gray-600">·</span>
-            <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{lead.city}</span>
-            <span className="text-gray-600">·</span>
-            <span>{lead.niche}</span>
+          <div className="flex items-center gap-4 mt-2 text-sm font-medium text-gray-500 flex-wrap">
+            <span className="text-white bg-gray-800 px-2 py-0.5 rounded border border-gray-700">{lead.negocio}</span>
+            <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 text-violet-500" />{lead.ciudad || 'Sin ciudad'}</span>
+            <span className="flex items-center gap-1.5"><Zap className="w-4 h-4 text-yellow-500" />{(lead as any).rubros?.nombre || 'General'}</span>
           </div>
         </div>
-        {/* Score visible */}
-        <div className="shrink-0 text-right space-y-1.5">
-          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${tier.bg} ${tier.text} ${tier.border}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${tier.dot}`} />
-            {tier.label}
-            <span className="font-bold">{scoreBreakdown.total}</span>
-          </span>
+        <div className="shrink-0 text-right space-y-2">
+          <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border shadow-lg ${tier.bg} ${tier.text} ${tier.border}`}>
+            <span className={`w-2 h-2 rounded-full ${tier.dot} shadow-[0_0_8px_currentColor]`} />
+            <span className="font-black uppercase text-[10px] tracking-widest">{tier.label}</span>
+            <span className="font-black text-lg ml-1 tabular-nums">{scoreBreakdown.total}</span>
+          </div>
           <div className="flex items-center justify-end gap-2">
-            <div className="w-20 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${tier.barColor}`} style={{ width: `${scoreBreakdown.total}%` }} />
+            <div className="w-32 h-2 bg-gray-900 rounded-full overflow-hidden border border-gray-800 shadow-inner">
+              <div className={`h-full rounded-full transition-all duration-1000 ${tier.barColor}`} style={{ width: `${scoreBreakdown.total}%` }} />
             </div>
           </div>
-          <div className="flex justify-end"><InterestStars level={lead.interest_level} /></div>
+          <div className="flex justify-end"><InterestStars level={lead.nivel_interes} /></div>
         </div>
       </div>
 
-      {/* Barra de estado de contacto */}
-      <div className="flex items-center gap-6 px-4 py-2.5 bg-gray-800/40 border border-gray-700/50 rounded-lg flex-wrap">
-        <div className="flex items-center gap-2">
-          <Clock className="w-3.5 h-3.5 text-gray-500" />
-          <span className="text-xs text-gray-400">Último contacto:</span>
-          <span className="text-xs text-white font-medium">
-            {lead.last_contacted_at ? formatFecha(lead.last_contacted_at) : <span className="text-gray-500 italic">Sin contacto aún</span>}
-          </span>
-        </div>
-        <div className="w-px h-4 bg-gray-700" />
-        <div className="flex items-center gap-2">
-          {followupStatus ? followupStatus.icon : <Calendar className="w-3.5 h-3.5 text-gray-500" />}
-          <span className="text-xs text-gray-400">Próximo seguimiento:</span>
-          {followupStatus ? (
-            <span className={`text-xs font-medium ${followupStatus.color}`}>{followupStatus.label}</span>
-          ) : (
-            <span className="text-xs text-gray-500 italic">No programado</span>
-          )}
-        </div>
-        {lead.notes && (
-          <>
-            <div className="w-px h-4 bg-gray-700" />
-            <p className="text-xs text-gray-400 truncate max-w-xs">{lead.notes}</p>
-          </>
-        )}
+      {/* Info rápida */}
+      <div className="grid grid-cols-3 gap-4">
+         <Card className="bg-gray-800/40 border-gray-700 shadow-xl overflow-hidden group">
+            <div className="h-1 w-full bg-violet-600/50" />
+            <CardContent className="pt-4 flex items-center gap-4">
+               <div className="p-3 bg-violet-900/20 rounded-2xl text-violet-400 group-hover:scale-110 transition-transform">
+                  <Clock className="w-5 h-5" />
+               </div>
+               <div>
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Último contacto</p>
+                  <p className="text-sm font-bold text-white mt-0.5">
+                    {lead.ultimo_contacto ? formatFecha(lead.ultimo_contacto) : <span className="text-gray-600 italic">Nunca</span>}
+                  </p>
+               </div>
+            </CardContent>
+         </Card>
+
+         <Card className="bg-gray-800/40 border-gray-700 shadow-xl overflow-hidden group">
+            <div className={`h-1 w-full ${lead.proximo_seguimiento ? 'bg-yellow-600/50' : 'bg-gray-700/50'}`} />
+            <CardContent className="pt-4 flex items-center gap-4">
+               <div className={`p-3 rounded-2xl group-hover:scale-110 transition-transform ${lead.proximo_seguimiento ? 'bg-yellow-900/20 text-yellow-400' : 'bg-gray-900/50 text-gray-600'}`}>
+                  <Calendar className="w-5 h-5" />
+               </div>
+               <div>
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Seguimiento</p>
+                  <p className={`text-sm font-bold mt-0.5 ${lead.proximo_seguimiento ? 'text-white' : 'text-gray-600'}`}>
+                    {lead.proximo_seguimiento ? format(parseISO(lead.proximo_seguimiento), "d 'de' MMM", { locale: es }) : 'No agendado'}
+                  </p>
+               </div>
+            </CardContent>
+         </Card>
+
+         <Card className="bg-gray-800/40 border-gray-700 shadow-xl overflow-hidden group">
+            <div className="h-1 w-full bg-blue-600/50" />
+            <CardContent className="pt-4 flex items-center gap-4">
+               <div className="p-3 bg-blue-900/20 rounded-2xl text-blue-400 group-hover:scale-110 transition-transform">
+                  <MessageSquare className="w-5 h-5" />
+               </div>
+               <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Estado</p>
+                  <p className="text-sm font-bold text-white mt-0.5 truncate uppercase tracking-tight">{lead.estado}</p>
+               </div>
+            </CardContent>
+         </Card>
       </div>
 
-      {/* ACCIONES PRINCIPALES */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          {lead.whatsapp ? (
+      {/* Acciones principales */}
+      <div className="flex items-center gap-3 flex-wrap">
+          {lead.whatsapp && (
             <a href={`https://wa.me/${lead.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer">
-              <Button className="bg-green-600 hover:bg-green-700 text-white gap-2 font-medium">
-                <Phone className="w-4 h-4" /> Abrir WhatsApp
+              <Button className="bg-green-600 hover:bg-green-700 text-white gap-2 font-black uppercase text-[11px] tracking-widest h-11 shadow-lg shadow-green-900/20 px-6 rounded-xl transition-all hover:scale-105 active:scale-95">
+                <Phone className="w-4 h-4" /> WhatsApp
               </Button>
             </a>
-          ) : (
-            <Button disabled className="gap-2 opacity-40">
-              <Phone className="w-4 h-4" /> WhatsApp no disponible
-            </Button>
           )}
-
-          {lead.instagram ? (
+          {lead.instagram && (
             <a href={`https://instagram.com/${lead.instagram.replace('@', '')}`} target="_blank" rel="noreferrer">
-              <Button className="bg-pink-600 hover:bg-pink-700 text-white gap-2 font-medium">
-                <AtSign className="w-4 h-4" /> Abrir Instagram
+              <Button className="bg-pink-600 hover:bg-pink-700 text-white gap-2 font-black uppercase text-[11px] tracking-widest h-11 shadow-lg shadow-pink-900/20 px-6 rounded-xl transition-all hover:scale-105 active:scale-95">
+                <AtSign className="w-4 h-4" /> Instagram
               </Button>
             </a>
-          ) : (
-            <Button disabled className="gap-2 opacity-40">
-              <AtSign className="w-4 h-4" /> Instagram no disponible
-            </Button>
           )}
-
           {nextStatusLabel && (
-            <Button onClick={avanzarEstado} variant="outline" className="border-violet-600 text-violet-300 hover:bg-violet-900/30 gap-2 font-medium">
-              <CheckCircle2 className="w-4 h-4" /> {nextStatusLabel}
+            <Button onClick={avanzarEstado} variant="outline" className="border-violet-600/50 text-violet-400 hover:bg-violet-600 hover:text-white gap-2 font-black uppercase text-[11px] tracking-widest h-11 px-6 rounded-xl shadow-lg transition-all">
+              <Zap className="w-4 h-4" /> {nextStatusLabel}
             </Button>
           )}
-
           <Button
-            onClick={() => { setFollowupOpen((v) => !v); setNoteOpen(false) }}
+            onClick={() => { setFollowupOpen(!followupOpen); setNoteOpen(false) }}
             variant="outline"
-            className={`gap-2 font-medium ${followupOpen ? 'border-yellow-500 text-yellow-300' : 'border-gray-600 text-gray-300 hover:border-yellow-500 hover:text-yellow-300'}`}
+            className={`gap-2 font-black uppercase text-[11px] tracking-widest h-11 px-6 rounded-xl shadow-lg transition-all ${followupOpen ? 'bg-yellow-600 text-white border-yellow-500' : 'border-gray-700 text-gray-400 hover:bg-gray-800'}`}
           >
-            <Calendar className="w-4 h-4" /> Programar seguimiento
+            <Calendar className="w-4 h-4" /> Seguimiento
           </Button>
-
           <Button
-            onClick={() => { setNoteOpen((v) => !v); setFollowupOpen(false) }}
+            onClick={() => { setNoteOpen(!noteOpen); setFollowupOpen(false) }}
             variant="outline"
-            className={`gap-2 font-medium ${noteOpen ? 'border-blue-500 text-blue-300' : 'border-gray-600 text-gray-300 hover:border-blue-500 hover:text-blue-300'}`}
+            className={`gap-2 font-black uppercase text-[11px] tracking-widest h-11 px-6 rounded-xl shadow-lg transition-all ${noteOpen ? 'bg-blue-600 text-white border-blue-500' : 'border-gray-700 text-gray-400 hover:bg-gray-800'}`}
           >
-            <StickyNote className="w-4 h-4" /> Agregar nota rápida
+            <StickyNote className="w-4 h-4" /> Nota
           </Button>
-        </div>
-
-        {/* Inline: Programar seguimiento */}
-        {followupOpen && (
-          <div className="flex items-center gap-3 p-3 bg-yellow-900/15 border border-yellow-700/40 rounded-lg">
-            <Calendar className="w-4 h-4 text-yellow-400 shrink-0" />
-            <span className="text-sm text-yellow-300 font-medium shrink-0">Próximo seguimiento:</span>
-            <input
-              type="date"
-              value={followupDate}
-              onChange={(e) => setFollowupDate(e.target.value)}
-              className="bg-gray-900 border border-gray-700 rounded-md px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-500"
-            />
-            <Button onClick={guardarSeguimiento} size="sm" className="bg-yellow-600 hover:bg-yellow-700 text-black font-medium">
-              Guardar
-            </Button>
-            <button onClick={() => setFollowupOpen(false)} className="text-xs text-gray-500 hover:text-gray-300 ml-auto">
-              Cancelar
-            </button>
-          </div>
-        )}
-
-        {/* Inline: Nota rápida */}
-        {noteOpen && (
-          <div className="p-3 bg-blue-900/15 border border-blue-700/40 rounded-lg space-y-2">
-            <div className="flex items-center gap-2">
-              <StickyNote className="w-4 h-4 text-blue-400" />
-              <span className="text-sm text-blue-300 font-medium">Nota rápida</span>
-            </div>
-            <Textarea
-              autoFocus
-              placeholder="Escribí lo que necesitás recordar sobre este prospecto..."
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              className="bg-gray-900 border-gray-700 text-white resize-none text-sm"
-              rows={3}
-              onKeyDown={(e) => { if (e.key === 'Enter' && e.ctrlKey) guardarNota() }}
-            />
-            <div className="flex items-center gap-2">
-              <Button onClick={guardarNota} size="sm" className="bg-blue-600 hover:bg-blue-700">
-                Guardar nota
-              </Button>
-              <button onClick={() => { setNoteOpen(false); setNoteText('') }} className="text-xs text-gray-500 hover:text-gray-300">
-                Cancelar
-              </button>
-              <span className="text-xs text-gray-600 ml-auto">Ctrl+Enter para guardar</span>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Contenido principal */}
-      <div className="grid grid-cols-3 gap-5">
-        {/* Columna izquierda — datos */}
-        <div className="col-span-1 space-y-4">
-          <Card className="bg-gray-800/50 border-gray-700">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-gray-400">Datos de contacto</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {lead.whatsapp ? (
-                <a href={`https://wa.me/${lead.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
-                  className="flex items-center gap-2 group">
-                  <Phone className="w-4 h-4 text-green-400 shrink-0" />
-                  <span className="text-sm text-green-400 group-hover:text-green-300">{lead.whatsapp}</span>
-                </a>
-              ) : (
-                <div className="flex items-center gap-2 opacity-40">
-                  <Phone className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm text-gray-500">Sin WhatsApp</span>
-                </div>
-              )}
+      {/* Formas expansibles */}
+      {followupOpen && (
+        <Card className="bg-yellow-900/10 border-yellow-700/30 p-4 rounded-2xl shadow-xl animate-in slide-in-from-top-2">
+           <div className="flex items-center gap-4">
+              <Calendar className="w-5 h-5 text-yellow-500" />
+              <p className="text-sm font-bold text-yellow-200">Programar próximo seguimiento</p>
+              <Input type="date" value={followupDate} onChange={e => setFollowupDate(e.target.value)} className="bg-gray-900 border-gray-700 text-white w-48" />
+              <Button onClick={guardarSeguimiento} className="bg-yellow-600 hover:bg-yellow-700 text-black font-black uppercase text-[10px] tracking-widest">Agendar</Button>
+              <Button variant="ghost" size="sm" onClick={() => setFollowupOpen(false)} className="text-gray-500 ml-auto">Cancelar</Button>
+           </div>
+        </Card>
+      )}
 
-              {lead.instagram ? (
-                <a href={`https://instagram.com/${lead.instagram.replace('@', '')}`} target="_blank" rel="noreferrer"
-                  className="flex items-center gap-2 group">
-                  <AtSign className="w-4 h-4 text-pink-400 shrink-0" />
-                  <span className="text-sm text-pink-400 group-hover:text-pink-300">{lead.instagram}</span>
-                </a>
-              ) : (
-                <div className="flex items-center gap-2 opacity-40">
-                  <AtSign className="w-4 h-4 text-gray-500" />
-                  <span className="text-sm text-gray-500">Sin Instagram</span>
-                </div>
-              )}
+      {noteOpen && (
+        <Card className="bg-blue-900/10 border-blue-700/30 p-4 rounded-2xl shadow-xl animate-in slide-in-from-top-2">
+           <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                 <StickyNote className="w-5 h-5 text-blue-400" />
+                 <p className="text-sm font-bold text-blue-200 uppercase tracking-widest">Nueva nota rápida</p>
+              </div>
+              <Textarea 
+                value={noteText} 
+                onChange={e => setNoteText(e.target.value)} 
+                placeholder="Escribí detalles importantes aquí..." 
+                className="bg-gray-900 border-gray-700 text-white" 
+              />
+              <div className="flex gap-2">
+                 <Button onClick={guardarNota} className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase text-[10px] tracking-widest">Guardar Nota</Button>
+                 <Button variant="ghost" size="sm" onClick={() => setNoteOpen(false)} className="text-gray-500">Cancelar</Button>
+              </div>
+           </div>
+        </Card>
+      )}
 
-              {lead.website && (
-                <a href={`https://${lead.website}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 group">
-                  <Globe className="w-4 h-4 text-blue-400 shrink-0" />
-                  <span className="text-sm text-blue-400 group-hover:text-blue-300 truncate">{lead.website}</span>
-                </a>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gray-800/50 border-gray-700">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-gray-400">Estado del prospecto</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500">Estado actual</span>
-                <LeadStatusBadge status={lead.status} />
-              </div>
-              {/* Score comercial con desglose */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Score comercial</span>
-                  <span className={`text-sm font-bold ${tier.text}`}>{scoreBreakdown.total} / 100</span>
-                </div>
-                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${tier.barColor}`} style={{ width: `${scoreBreakdown.total}%` }} />
-                </div>
-                {/* Badge tier */}
-                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full border ${tier.bg} ${tier.text} ${tier.border}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${tier.dot}`} />
-                  {tier.label}
-                </span>
-                {/* Desglose de reglas */}
-                <div className="space-y-1 pt-1 border-t border-gray-700">
-                  <p className="text-xs text-gray-600">Desglose:</p>
-                  {scoreBreakdown.reasons.map((r, i) => (
-                    <div key={i} className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">{r.label}</span>
-                      <span className={`text-xs font-medium tabular-nums ${r.value > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {r.value > 0 ? '+' : ''}{r.value}
-                      </span>
-                    </div>
-                  ))}
-                  {scoreBreakdown.reasons.length === 0 && (
-                    <p className="text-xs text-gray-600 italic">Sin actividad aún</p>
-                  )}
-                </div>
-              </div>
-              <div>
-                <span className="text-xs text-gray-500 block mb-1">Interés</span>
-                <InterestStars level={lead.interest_level} />
-              </div>
-              <div className="pt-2 border-t border-gray-700 space-y-2">
-                <div>
-                  <span className="text-xs text-gray-500 block">Último contacto</span>
-                  <span className="text-sm text-white">
-                    {lead.last_contacted_at ? formatFecha(lead.last_contacted_at) : <span className="text-gray-500 italic text-xs">Sin contacto</span>}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-xs text-gray-500 block">Próximo seguimiento</span>
-                  {followupStatus ? (
-                    <span className={`text-sm font-medium ${followupStatus.color}`}>{followupStatus.label}</span>
-                  ) : (
-                    <button
-                      onClick={() => setFollowupOpen(true)}
-                      className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 mt-0.5"
-                    >
-                      <Plus className="w-3 h-3" /> Programar
-                    </button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {lead.notes && (
-            <Card className="bg-gray-800/50 border-gray-700">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-gray-400">Notas de la ficha</CardTitle>
+      <div className="grid grid-cols-3 gap-6">
+        {/* Columna izquierda: Datos y Score */}
+        <div className="space-y-6">
+           <Card className="bg-gray-800/40 border-gray-700 shadow-xl rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gray-900/30 border-b border-gray-700 pb-3">
+                 <CardTitle className="text-[11px] font-black text-gray-500 uppercase tracking-widest">Información de Contacto</CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-300">{lead.notes}</p>
+              <CardContent className="pt-5 space-y-4">
+                 {lead.sitio_web && (
+                    <a href={`https://${lead.sitio_web}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3 bg-gray-900/50 rounded-xl border border-gray-800 hover:border-blue-500/30 transition-all group">
+                       <Globe className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" />
+                       <span className="text-xs font-bold text-gray-300 truncate">{lead.sitio_web}</span>
+                    </a>
+                 )}
+                 <div className="space-y-3">
+                    <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Notas de ficha</p>
+                    <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 text-xs text-gray-400 leading-relaxed italic">
+                       {lead.notas || 'Sin notas descriptivas'}
+                    </div>
+                 </div>
               </CardContent>
-            </Card>
-          )}
+           </Card>
 
-          <Link href="/plantillas">
-            <Button variant="outline" size="sm" className="w-full border-violet-700 text-violet-400 hover:bg-violet-900/20 justify-start gap-2">
-              <MessageSquare className="w-3.5 h-3.5" /> Ver plantillas de mensaje
-            </Button>
-          </Link>
-        </div>
-
-        {/* Columna derecha: actividad */}
-        <div className="col-span-2 space-y-4">
-          {/* Registrar actividad */}
-          <Card className="bg-gray-800/50 border-gray-700">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-gray-400">Registrar actividad</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-3">
-                <Select value={activityType} onValueChange={(v) => setActivityType((v ?? 'message_sent') as Activity['type'])}>
-                  <SelectTrigger className="w-48 bg-gray-900 border-gray-700 shrink-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
-                    <SelectItem value="message_sent">Mensaje enviado</SelectItem>
-                    <SelectItem value="reply_received">Respondió</SelectItem>
-                    <SelectItem value="call">Llamada</SelectItem>
-                    <SelectItem value="meeting">Reunión</SelectItem>
-                    <SelectItem value="note">Nota</SelectItem>
-                    <SelectItem value="status_change">Cambio de estado</SelectItem>
-                  </SelectContent>
-                </Select>
-                <input
-                  className="flex-1 bg-gray-900 border border-gray-700 rounded-md px-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                  placeholder="¿Qué pasó? Describí brevemente..."
-                  value={activityDesc}
-                  onChange={(e) => setActivityDesc(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') registrarActividad() }}
-                />
-                <Button onClick={registrarActividad} size="sm" className="bg-violet-600 hover:bg-violet-700 shrink-0">
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Timeline */}
-          <Card className="bg-gray-800/50 border-gray-700">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-gray-400 flex items-center justify-between">
-                Historial de actividad
-                <span className="text-xs text-gray-600 font-normal">{activities.length} registros</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {activities.length === 0 ? (
-                <div className="text-center py-10">
-                  <MessageSquare className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">Sin actividad registrada</p>
-                  <p className="text-xs text-gray-600 mt-1">¡Enviá el primer mensaje y registralo!</p>
-                </div>
-              ) : (
-                <div className="relative">
-                  <div className="absolute left-4 top-0 bottom-0 w-px bg-gray-700" />
-                  <div className="space-y-3">
-                    {activities.map((act) => (
-                      <div key={act.id} className="flex gap-4 pl-10 relative">
-                        <div className="absolute left-[7px] w-4 h-4 rounded-full bg-gray-900 border border-gray-700 flex items-center justify-center top-3">
-                          <div className="w-2 h-2 rounded-full bg-violet-500" />
-                        </div>
-                        <div className="flex-1 bg-gray-900 rounded-lg p-3">
-                          <div className="flex items-center gap-2 mb-1">
-                            {activityIcons[act.type]}
-                            <span className="text-xs font-medium text-gray-300">{TIPO_LABELS[act.type]}</span>
-                            <span className="ml-auto text-xs text-gray-600 shrink-0">
-                              {format(new Date(act.created_at), "d 'de' MMM, HH:mm", { locale: es })}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-400">{act.description}</p>
-                        </div>
+           <Card className="bg-gray-800/40 border-gray-700 shadow-xl rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gray-900/30 border-b border-gray-700 pb-3">
+                 <CardTitle className="text-[11px] font-black text-gray-500 uppercase tracking-widest text-center">Score Comercial Detallado</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-5 space-y-5">
+                 <div className="space-y-2">
+                    {scoreBreakdown.reasons.map((r, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-700/20 transition-colors">
+                        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-tight">{r.label}</span>
+                        <span className={`text-xs font-black tabular-nums ${r.value > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {r.value > 0 ? '+' : ''}{r.value}
+                        </span>
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                 </div>
+                 <div className="pt-4 border-t border-gray-700">
+                    <Link href="/plantillas">
+                      <Button variant="ghost" className="w-full text-violet-400 hover:text-white hover:bg-violet-600/20 gap-2 font-black uppercase text-[10px] tracking-widest">
+                         <MessageSquare className="w-4 h-4" /> Ver plantillas de apoyo
+                      </Button>
+                    </Link>
+                 </div>
+              </CardContent>
+           </Card>
+        </div>
+
+        {/* Columna derecha: Actividad */}
+        <div className="col-span-2 space-y-6">
+           <Card className="bg-gray-800/40 border-gray-700 shadow-xl rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gray-900/30 border-b border-gray-700 pb-4">
+                 <CardTitle className="text-[11px] font-black text-gray-500 uppercase tracking-widest">Registrar nueva actividad</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6">
+                 <div className="flex gap-3">
+                    <Select value={activityType} onValueChange={(val) => setActivityType(val || 'message_sent')}>
+                       <SelectTrigger className="w-52 bg-gray-900 border-gray-700 text-white font-bold uppercase text-[10px] tracking-widest rounded-xl">
+                          <SelectValue />
+                       </SelectTrigger>
+                       <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                          <SelectItem value="message_sent">Mensaje enviado</SelectItem>
+                          <SelectItem value="reply_received">Respondió</SelectItem>
+                          <SelectItem value="call">Llamada</SelectItem>
+                          <SelectItem value="meeting">Reunión</SelectItem>
+                          <SelectItem value="note">Nota</SelectItem>
+                          <SelectItem value="status_change">Cambio de estado</SelectItem>
+                       </SelectContent>
+                    </Select>
+                    <Input 
+                      value={activityDesc} 
+                      onChange={e => setActivityDesc(e.target.value)} 
+                      placeholder="¿Qué ocurrió en este paso?" 
+                      className="bg-gray-900 border-gray-700 text-white rounded-xl"
+                      onKeyDown={e => e.key === 'Enter' && registrarActividad()}
+                    />
+                    <Button onClick={registrarActividad} className="bg-violet-600 hover:bg-violet-700 text-white shadow-lg rounded-xl h-10 w-10 p-0">
+                       <Plus className="w-5 h-5" />
+                    </Button>
+                 </div>
+              </CardContent>
+           </Card>
+
+           <Card className="bg-gray-800/40 border-gray-700 shadow-xl rounded-2xl overflow-hidden min-h-[400px]">
+              <CardHeader className="bg-gray-900/30 border-b border-gray-700 pb-4">
+                 <CardTitle className="text-[11px] font-black text-gray-500 uppercase tracking-widest flex items-center justify-between">
+                    Historial de interacción
+                    <span className="text-[10px] text-violet-400">{activities.length} REGISTROS</span>
+                 </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-8">
+                 {activities.length === 0 ? (
+                    <div className="text-center py-20 opacity-30">
+                       <MessageSquare className="w-12 h-12 mx-auto mb-4" />
+                       <p className="text-sm font-black uppercase tracking-widest">Sin actividad registrada aún</p>
+                    </div>
+                 ) : (
+                    <div className="relative pl-8">
+                       <div className="absolute left-[15px] top-0 bottom-0 w-[2px] bg-gray-800" />
+                       <div className="space-y-8">
+                          {activities.map((act) => (
+                             <div key={act.id} className="relative">
+                                <div className="absolute -left-[33px] top-1 w-6 h-6 rounded-full bg-gray-900 border-2 border-gray-800 flex items-center justify-center z-10 shadow-lg">
+                                   <div className="w-2 h-2 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]" />
+                                </div>
+                                <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 shadow-inner hover:border-gray-700 transition-all">
+                                   <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2">
+                                         {activityIcons[act.tipo] || <FileText className="w-4 h-4 text-gray-400" />}
+                                         <span className="text-[10px] font-black text-white uppercase tracking-widest">{TIPO_LABELS[act.tipo] || 'Actividad'}</span>
+                                      </div>
+                                      <span className="text-[10px] font-bold text-gray-600 uppercase">
+                                         {format(parseISO(act.created_at), "d 'de' MMM, HH:mm", { locale: es })}
+                                      </span>
+                                   </div>
+                                   <p className="text-sm text-gray-400 leading-relaxed font-medium">{act.contenido}</p>
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                 )}
+              </CardContent>
+           </Card>
         </div>
       </div>
     </div>
