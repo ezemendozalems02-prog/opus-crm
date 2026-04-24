@@ -50,7 +50,13 @@ export default function LoginPage() {
         router.refresh()
       }
     } catch (err: any) {
-      setError(err.message === 'Invalid login credentials' ? 'Credenciales inválidas' : err.message)
+      let message = err.message
+      if (message === 'Failed to fetch') {
+        message = 'Error de conexión: No se pudo contactar con Supabase. Verificá la URL en .env.local.'
+      } else if (message === 'Invalid login credentials') {
+        message = 'Credenciales inválidas'
+      }
+      setError(message)
       toast.error('Error al autenticar')
     } finally {
       setLoading(false)
