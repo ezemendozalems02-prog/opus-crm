@@ -87,7 +87,7 @@ export async function updateSession(request: NextRequest) {
     // Redirect logged in users away from login
     if (isAuthRoute) {
       const url = request.nextUrl.clone()
-      url.pathname = '/'
+      url.pathname = perfil?.rol === 'super_admin' ? '/admin' : '/'
       return NextResponse.redirect(url)
     }
   }

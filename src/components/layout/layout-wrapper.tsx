@@ -24,8 +24,9 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
 
   const isAuthRoute = pathname === '/login' || pathname.startsWith('/auth')
   const isSuscripcionRoute = pathname.startsWith('/suscripcion')
+  const isAdminRoute = pathname.startsWith('/admin')
 
-  if (isAuthRoute || isSuscripcionRoute) {
+  if (isAuthRoute || isSuscripcionRoute || isAdminRoute) {
     return <>{children}</>
   }
 
