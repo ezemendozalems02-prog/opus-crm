@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
@@ -74,17 +73,17 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center shadow-lg shadow-red-900/20">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center shadow-lg shadow-red-900/20 shrink-0">
            <TrendingUp className="w-6 h-6 text-white" />
         </div>
-        <PageHeader 
-          title="Super Admin Dashboard" 
-          description="Control global de la plataforma SaaS Opus Prospect" 
-        />
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Super Admin Dashboard</h1>
+          <p className="text-gray-400 text-sm mt-0.5">Control global de la plataforma SaaS Opus Prospect</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {kpis.map((kpi) => (
           <Card key={kpi.label} className={`border-0 shadow-xl ${kpi.bg}`}>
             <CardContent className="pt-4 pb-4">
@@ -98,7 +97,7 @@ export default function AdminDashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <Card className="bg-gray-800/40 border-gray-700 shadow-xl">
            <CardHeader>
               <CardTitle className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">

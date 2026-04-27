@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import {
-  LayoutDashboard, Users, LogOut, ShieldAlert, Zap
+  LayoutDashboard, Users, LogOut, ShieldAlert, Menu
 } from 'lucide-react'
 
 const adminNav = [
@@ -21,10 +21,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter()
   const supabase = createClient()
   const [user, setUser] = useState<any>(null)
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => setUser(user))
   }, [supabase])
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -35,8 +41,39 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="flex min-h-screen bg-gray-950">
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Mobile top bar */}
+      <div className="fixed top-0 left-0 right-0 h-14 bg-gray-950 border-b border-red-900/30 flex items-center px-4 z-30 md:hidden">
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="p-2 text-gray-400 hover:text-white hover:bg-red-900/20 rounded-lg transition-colors"
+          aria-label="Abrir menú admin"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-2 ml-3">
+          <div className="w-6 h-6 bg-red-600 rounded-md flex items-center justify-center shadow-lg">
+            <ShieldAlert className="w-3 h-3 text-white" />
+          </div>
+          <div>
+            <p className="text-white font-bold text-sm leading-none">Opus Admin</p>
+          </div>
+        </div>
+      </div>
+
       {/* Sidebar admin */}
-      <aside className="fixed left-0 top-0 h-screen w-64 bg-gray-950 border-r border-red-900/30 flex flex-col z-40">
+      <aside className={cn(
+        'fixed left-0 top-0 h-screen w-64 bg-gray-950 border-r border-red-900/30 flex flex-col z-50 transition-transform duration-300',
+        'md:translate-x-0',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      )}>
         {/* Logo */}
         <div className="p-6 border-b border-red-900/30">
           <div className="flex items-center gap-2">
@@ -91,7 +128,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Contenido */}
-      <main className="ml-64 flex-1 p-8">
+      <main className="md:ml-64 flex-1 p-4 md:p-8 pt-16 md:pt-8">
         {children}
       </main>
     </div>

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { PageHeader } from '@/components/layout/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -96,32 +95,35 @@ export default function AdminClientesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-         <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center shadow-lg shadow-red-900/20">
+      <div className="flex items-center gap-3 mb-2">
+         <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center shadow-lg shadow-red-900/20 shrink-0">
             <ShieldAlert className="w-6 h-6 text-white" />
          </div>
-         <PageHeader 
-           title="Gestión de Clientes" 
-           description="Control total sobre usuarios y suscripciones" 
-         />
+         <div>
+           <h1 className="text-xl sm:text-2xl font-bold text-white">Gestión de Clientes</h1>
+           <p className="text-gray-400 text-sm mt-0.5">Control total sobre usuarios y suscripciones</p>
+         </div>
       </div>
 
       <Card className="bg-gray-900 border-gray-800 shadow-xl overflow-hidden">
-        <div className="p-4 border-b border-gray-800 bg-gray-900/50 flex gap-4">
-           <div className="relative flex-1 max-w-sm">
+        <div className="p-4 border-b border-gray-800 bg-gray-900/50 flex flex-col sm:flex-row gap-3">
+           <div className="relative flex-1">
              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-             <Input 
-               placeholder="Buscar por nombre o email..." 
+             <Input
+               placeholder="Buscar por nombre o email..."
                value={search}
                onChange={e => setSearch(e.target.value)}
                className="pl-10 bg-gray-800 border-gray-700 text-white"
              />
            </div>
-           <Button onClick={fetchClientes} variant="ghost" className="text-gray-500">
+           <Button onClick={fetchClientes} variant="ghost" className="text-gray-500 shrink-0">
              <Zap className="w-4 h-4 mr-2" /> Refrescar
            </Button>
         </div>
         <CardContent className="p-0">
+          <p className="text-[10px] text-gray-700 px-4 pt-2 flex items-center gap-1 sm:hidden">
+            <span>←</span> Deslizá para ver todas las columnas <span>→</span>
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
