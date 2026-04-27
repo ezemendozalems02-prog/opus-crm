@@ -27,23 +27,36 @@ export default function LoginPage() {
 
     try {
       if (isRegister) {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            data: {
-              nombre: nombre,
-            },
-          },
+          options: { data: { nombre } },
         })
         if (error) throw error
-        toast.success('Cuenta creada. Ya podés ingresar.')
-        setIsRegister(false)
+
+        if (data.session) {
+          // Email confirmation disabled — user is logged in immediately
+          // Create profile in perfiles
+          await supabase.from('perfiles').upsert({
+            id: data.user!.id,
+            email,
+            nombre,
+            rol: 'cliente',
+            estado_cuenta: 'trial',
+            habilitado: true,
+            es_demo: false,
+            trial_fin: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          })
+          toast.success('¡Bienvenido! Tu prueba gratuita de 7 días comenzó.')
+          router.push('/')
+          router.refresh()
+        } else {
+          // Email confirmation enabled — ask user to check inbox
+          toast.success('¡Listo! Revisá tu correo para confirmar tu cuenta.')
+          setIsRegister(false)
+        }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
         toast.success('Sesión iniciada correctamente')
         router.push('/')
@@ -52,9 +65,15 @@ export default function LoginPage() {
     } catch (err: any) {
       let message = err.message
       if (message === 'Failed to fetch') {
-        message = 'Error de conexión: No se pudo contactar con Supabase. Verificá la URL en .env.local.'
+        message = 'Error de conexión. Verificá tu internet e intentá de nuevo.'
       } else if (message === 'Invalid login credentials') {
-        message = 'Credenciales inválidas'
+        message = 'Email o contraseña incorrectos.'
+      } else if (message?.includes('email rate limit exceeded')) {
+        message = 'Demasiados registros en poco tiempo. Intentá en unos minutos o contactá al soporte.'
+      } else if (message?.includes('User already registered')) {
+        message = 'Este email ya tiene una cuenta. Intentá iniciar sesión.'
+      } else if (message?.includes('Password should be at least')) {
+        message = 'La contraseña debe tener al menos 6 caracteres.'
       }
       setError(message)
       toast.error('Error al autenticar')
@@ -107,7 +126,7 @@ export default function LoginPage() {
                   />
                 </div>
                 <div className="bg-violet-900/10 border border-violet-800/30 p-3 rounded-lg text-xs text-violet-300 text-center font-medium">
-                  🚀 Al registrarte obtenés **7 días de prueba gratis** sin compromiso y sin tarjeta.
+                  🚀 Al registrarte obtenés <span className="font-black text-white">7 días de prueba gratis</span> sin compromiso y sin tarjeta.
                 </div>
               </>
             )}
