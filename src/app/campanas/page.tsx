@@ -99,11 +99,49 @@ export default function CampanasPage() {
             <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
             <p className="text-gray-500">Cargando campañas...</p>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="col-span-full py-20 text-center bg-gray-900/30 rounded-2xl border border-dashed border-gray-800">
-             <Megaphone className="w-10 h-10 text-gray-700 mx-auto mb-4" />
-             <p className="text-gray-500 font-medium">No hay campañas registradas</p>
-          </div>
+        ) : campanas.length === 0 ? (
+          <>
+            <div className="col-span-full flex items-center gap-2 bg-violet-900/20 border border-violet-700/30 rounded-xl px-4 py-2.5">
+              <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest border border-violet-500/50 rounded-full px-2 py-0.5">Ejemplos</span>
+              <span className="text-xs text-violet-300 font-medium">Así se ven tus campañas — creá la primera con &quot;Nueva campaña&quot;</span>
+            </div>
+            {[
+              { nombre: 'Estéticas CABA — Primavera', objetivo: 'Conseguir 20 reuniones con dueñas de centros de estética en Capital Federal', estado: 'activa', rubro: 'Estéticas' },
+              { nombre: 'Restaurantes Córdoba Centro', objetivo: 'Prospectar parrillas y restós en el centro de Córdoba para ofrecer sistema de fidelización', estado: 'pausada', rubro: 'Restaurantes' },
+              { nombre: 'Inmobiliarias Gran Rosario', objetivo: 'Demostrar el CRM a inmobiliarias de Rosario que responden tarde a portales', estado: 'activa', rubro: 'Inmobiliarias' },
+            ].map((ej, i) => (
+              <Card key={i} className="bg-gray-800/40 border-gray-700 flex flex-col opacity-40 pointer-events-none select-none overflow-hidden">
+                <CardHeader className="pb-3 border-b border-gray-700/50 bg-gray-900/30">
+                  <div className="space-y-1">
+                    <CardTitle className="text-base font-bold text-white">{ej.nombre}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wider ${ej.estado === 'activa' ? 'bg-green-900/20 text-green-400 border-green-700/30' : 'bg-yellow-900/20 text-yellow-400 border-yellow-700/30'}`}>{ej.estado}</span>
+                      <span className="text-[10px] bg-gray-900 text-gray-400 px-2 py-0.5 rounded-full border border-gray-700 font-bold uppercase tracking-wider flex items-center gap-1"><Tag className="w-2.5 h-2.5" />{ej.rubro}</span>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4 flex-1 space-y-4">
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-1.5"><Target className="w-3 h-3 text-violet-400" />Objetivo</p>
+                    <p className="text-xs text-gray-300 leading-relaxed font-medium">{ej.objetivo}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="bg-gray-950/40 p-2.5 rounded-xl border border-gray-800">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase mb-1">Impacto</p>
+                      <div className="flex items-center gap-1.5 text-white"><Users className="w-3.5 h-3.5 text-cyan-400" /><span className="text-sm font-black">---</span></div>
+                    </div>
+                    <div className="bg-gray-950/40 p-2.5 rounded-xl border border-gray-800">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase mb-1">Respuesta</p>
+                      <div className="flex items-center gap-1.5 text-white"><BarChart3 className="w-3.5 h-3.5 text-green-400" /><span className="text-sm font-black">---</span></div>
+                    </div>
+                  </div>
+                </CardContent>
+                <CardFooter className="pt-3 pb-4 px-6 border-t border-gray-700/30 bg-gray-900/20">
+                  <div className="w-full h-9 rounded-lg bg-gray-800/50" />
+                </CardFooter>
+              </Card>
+            ))}
+          </>
         ) : filtered.map((c) => {
           const rubro = (c as any).rubros
           return (

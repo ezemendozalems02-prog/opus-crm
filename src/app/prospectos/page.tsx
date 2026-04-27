@@ -217,6 +217,46 @@ export default function ProspectosPage() {
                       </div>
                     </td>
                   </tr>
+                ) : prospectos.length === 0 ? (
+                  <>
+                    <tr>
+                      <td colSpan={7} className="pt-6 pb-2 px-4">
+                        <div className="flex items-center gap-2 bg-violet-900/20 border border-violet-700/30 rounded-xl px-4 py-2.5">
+                          <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest border border-violet-500/50 rounded-full px-2 py-0.5">Ejemplos</span>
+                          <span className="text-xs text-violet-300 font-medium">Así se ven tus prospectos — agregá el tuyo con el botón &quot;Nuevo prospecto&quot;</span>
+                        </div>
+                      </td>
+                    </tr>
+                    {[
+                      { nombre: 'Laura García', negocio: 'Estética Luminous', rubro: 'Estéticas', ciudad: 'Buenos Aires', estado: 'Interesado', nivel_interes: 4, instagram: '@luminous.estetica', whatsapp: '1154321098' },
+                      { nombre: 'Marcos Rodríguez', negocio: 'Parrilla Don Marcos', rubro: 'Restaurantes', ciudad: 'Córdoba', estado: 'Contactado', nivel_interes: 3, instagram: '@donmarcos.parrilla', whatsapp: '3514567890' },
+                      { nombre: 'Sofía Benítez', negocio: 'Inmobiliaria Sur', rubro: 'Inmobiliarias', ciudad: 'Rosario', estado: 'Nuevo', nivel_interes: 2, instagram: '@inmosur', whatsapp: '3411234567' },
+                    ].map((ej, i) => (
+                      <tr key={i} className="opacity-40 pointer-events-none select-none">
+                        <td className="py-4 px-4">
+                          <p className="text-sm font-semibold text-white">{ej.nombre}</p>
+                          <p className="text-xs text-gray-500">{ej.negocio}</p>
+                        </td>
+                        <td className="py-4 px-4">
+                          <span className="text-xs text-gray-300">{ej.rubro}</span>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3 text-gray-600" />
+                            <span className="text-[10px] text-gray-600 font-medium">{ej.ciudad}</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5"><AtSign className="w-3 h-3 text-pink-500" /><span className="text-xs text-gray-400">{ej.instagram}</span></div>
+                            <div className="flex items-center gap-1.5"><Phone className="w-3 h-3 text-green-500" /><span className="text-xs text-gray-400">{ej.whatsapp}</span></div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4"><LeadStatusBadge status={ej.estado as any} /></td>
+                        <td className="py-4 px-4"><InterestStars level={ej.nivel_interes} /></td>
+                        <td className="py-4 px-4"><span className="text-xs text-gray-500">—</span></td>
+                        <td className="py-4 px-4" />
+                      </tr>
+                    ))}
+                  </>
                 ) : filtered.map((lead) => (
                   <tr key={lead.id} className="hover:bg-gray-800/30 transition-colors group">
                     <td className="py-4 px-4">

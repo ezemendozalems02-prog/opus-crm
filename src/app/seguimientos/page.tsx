@@ -135,11 +135,47 @@ export default function SeguimientosPage() {
             <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
             <p className="text-gray-500">Cargando seguimientos...</p>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="col-span-full py-20 text-center bg-gray-900/30 rounded-2xl border border-dashed border-gray-800">
-             <Bell className="w-10 h-10 text-gray-700 mx-auto mb-4" />
-             <p className="text-gray-500 font-medium">No tenés seguimientos para esta categoría</p>
-          </div>
+        ) : seguimientos.length === 0 ? (
+          <>
+            <div className="col-span-full flex items-center gap-2 bg-violet-900/20 border border-violet-700/30 rounded-xl px-4 py-2.5">
+              <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest border border-violet-500/50 rounded-full px-2 py-0.5">Ejemplos</span>
+              <span className="text-xs text-violet-300 font-medium">Así se ven tus seguimientos — programá el primero con &quot;Programar seguimiento&quot;</span>
+            </div>
+            {[
+              { titulo: 'Llamada de cierre con Laura', prospecto: 'Laura García', negocio: 'Estética Luminous', descripcion: 'Tiene alta intención. Confirmar precio y fecha de arranque.', hoy: true, vencido: false },
+              { titulo: 'Enviar propuesta por WhatsApp', prospecto: 'Marcos Rodríguez', negocio: 'Parrilla Don Marcos', descripcion: 'Quedó en revisarla con su socio. Hacer seguimiento si no responde.', hoy: false, vencido: false },
+              { titulo: 'Recontactar — quedó en pensar', prospecto: 'Sofía Benítez', negocio: 'Inmobiliaria Sur', descripcion: 'Mostró interés pero pidió tiempo. Retomar con caso de éxito similar.', hoy: false, vencido: true },
+            ].map((ej, i) => (
+              <Card key={i} className={`bg-gray-800/40 border-gray-700 flex flex-col opacity-40 pointer-events-none select-none overflow-hidden`}>
+                <CardHeader className={`pb-3 border-b border-gray-700/50 ${ej.vencido ? 'bg-red-900/10' : ej.hoy ? 'bg-yellow-900/10' : 'bg-gray-900/30'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${ej.vencido ? 'bg-red-900/20 text-red-400' : 'bg-violet-900/20 text-violet-400'}`}>
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-bold text-white">{ej.titulo}</CardTitle>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Calendar className="w-3 h-3 text-gray-500" />
+                        <span className={`text-[10px] font-bold uppercase tracking-tight ${ej.vencido ? 'text-red-400' : ej.hoy ? 'text-yellow-400' : 'text-gray-500'}`}>
+                          {ej.vencido ? 'Vencido' : ej.hoy ? 'Hoy' : 'Próximamente'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="flex items-center justify-between p-2.5 bg-gray-900/50 rounded-xl border border-gray-800">
+                    <div><p className="text-xs font-bold text-white">{ej.prospecto}</p><p className="text-[10px] text-gray-500">{ej.negocio}</p></div>
+                    <ChevronRight className="w-4 h-4 text-gray-700" />
+                  </div>
+                  <p className="text-xs text-gray-400 leading-relaxed italic">{ej.descripcion}</p>
+                </CardContent>
+                <CardFooter className="pt-3 border-t border-gray-700/50 bg-gray-900/20">
+                  <div className="w-full h-9 rounded-lg bg-gray-800/50" />
+                </CardFooter>
+              </Card>
+            ))}
+          </>
         ) : filtered.map((s) => {
           const prospecto = (s as any).prospectos
           const sDate = parseISO(s.fecha)

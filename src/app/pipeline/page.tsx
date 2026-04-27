@@ -93,6 +93,12 @@ export default function PipelinePage() {
   const getLeadsByStatus = (status: LeadStatus) => prospectos.filter((l) => l.estado === status)
   const totalActivos = prospectos.filter((l) => !['Ganado', 'Perdido'].includes(l.estado)).length
 
+  const EJEMPLOS_PIPELINE: Record<string, { nombre: string; negocio: string; ciudad: string; rubro: string; nivel_interes: number }[]> = {
+    'Nuevo': [{ nombre: 'Sofía Benítez', negocio: 'Inmobiliaria Sur', ciudad: 'Rosario', rubro: 'Inmobiliarias', nivel_interes: 2 }],
+    'Contactado': [{ nombre: 'Marcos Rodríguez', negocio: 'Parrilla Don Marcos', ciudad: 'Córdoba', rubro: 'Restaurantes', nivel_interes: 3 }],
+    'Interesado': [{ nombre: 'Laura García', negocio: 'Estética Luminous', ciudad: 'Buenos Aires', rubro: 'Estéticas', nivel_interes: 4 }],
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
@@ -106,8 +112,14 @@ export default function PipelinePage() {
     <div>
       <PageHeader
         title="Pipeline"
-        description={`${totalActivos} prospectos activos — arrastrar para cambiar etapa`}
+        description={prospectos.length === 0 ? 'Ejemplos de cómo se ve el pipeline — agregá prospectos para ver los reales' : `${totalActivos} prospectos activos — arrastrar para cambiar etapa`}
       />
+      {prospectos.length === 0 && (
+        <div className="flex items-center gap-2 bg-violet-900/20 border border-violet-700/30 rounded-xl px-4 py-2.5 mb-4">
+          <span className="text-[10px] font-black text-violet-400 uppercase tracking-widest border border-violet-500/50 rounded-full px-2 py-0.5">Ejemplos</span>
+          <span className="text-xs text-violet-300 font-medium">Agregá prospectos desde la sección Prospectos para verlos acá y arrastrarlos entre etapas</span>
+        </div>
+      )}
 
       <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: '75vh' }}>
         {ETAPAS.map((etapa) => {
@@ -145,11 +157,25 @@ export default function PipelinePage() {
                     onDragStart={() => handleDragStart(lead.id)}
                   />
                 ))}
-                {etapaLeads.length === 0 && (
+                {etapaLeads.length === 0 && prospectos.length > 0 && (
                   <div className="text-center text-[10px] text-gray-700 py-12 font-medium uppercase tracking-widest border border-dashed border-gray-800 rounded-lg">
                     Soltá acá
                   </div>
                 )}
+                {prospectos.length === 0 && EJEMPLOS_PIPELINE[etapa.status]?.map((ej, i) => (
+                  <div key={i} className="opacity-40 pointer-events-none select-none bg-gray-800 border border-gray-700 rounded-xl p-3 shadow-md">
+                    <p className="text-sm font-bold text-white truncate">{ej.nombre}</p>
+                    <p className="text-[11px] text-gray-500 font-medium truncate mb-2">{ej.negocio}</p>
+                    <div className="flex items-center gap-1 mb-2">
+                      <MapPin className="w-3 h-3 text-gray-600" />
+                      <span className="text-[10px] text-gray-500">{ej.ciudad}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <InterestStars level={ej.nivel_interes} />
+                      <span className="text-[10px] text-gray-500 font-bold uppercase">{ej.rubro}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )
