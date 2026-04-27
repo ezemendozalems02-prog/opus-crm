@@ -129,7 +129,7 @@ export default function ProspectosPage() {
       />
 
       {/* Stats rápidas */}
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         {[
           { label: 'Total', value: stats.total, color: 'text-white' },
           { label: 'Activos', value: stats.activos, color: 'text-blue-400' },
@@ -147,8 +147,8 @@ export default function ProspectosPage() {
 
       {/* Filtros */}
       <div className="space-y-3 mb-5 bg-gray-900/50 p-4 rounded-xl border border-gray-800">
-        <div className="flex gap-3">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
               placeholder="Buscar por nombre, negocio, rubro o ciudad..."
@@ -163,7 +163,7 @@ export default function ProspectosPage() {
               <button
                 key={opt.value}
                 onClick={() => setTierFilter(opt.value)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors border ${
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
                   tierFilter === opt.value
                     ? 'bg-violet-600 text-white border-violet-500'
                     : `bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-white ${opt.color}`
@@ -179,7 +179,7 @@ export default function ProspectosPage() {
             <button
               key={opt.value}
               onClick={() => setStatusFilter(opt.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors border ${
                 statusFilter === opt.value
                   ? 'bg-violet-600 text-white border-violet-500'
                   : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700 hover:text-white'

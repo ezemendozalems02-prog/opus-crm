@@ -121,7 +121,10 @@ export default function PipelinePage() {
         </div>
       )}
 
-      <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: '75vh' }}>
+      <p className="text-[10px] text-gray-600 mb-3 flex items-center gap-1 md:hidden">
+        <span>←</span> Deslizá para ver todas las etapas <span>→</span>
+      </p>
+      <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0" style={{ minHeight: '75vh' }}>
         {ETAPAS.map((etapa) => {
           const etapaLeads = getLeadsByStatus(etapa.status)
           const isDragTarget = dragOver === etapa.status
@@ -129,7 +132,7 @@ export default function PipelinePage() {
           return (
             <div
               key={etapa.status}
-              className="flex-shrink-0 w-64"
+              className="flex-shrink-0 w-56 sm:w-64"
               onDragOver={(e) => handleDragOver(e, etapa.status)}
               onDrop={() => handleDrop(etapa.status)}
               onDragLeave={() => setDragOver(null)}

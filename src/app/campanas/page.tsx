@@ -83,7 +83,7 @@ export default function CampanasPage() {
         }
       />
 
-      <div className="relative max-w-md">
+      <div className="relative w-full sm:max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
         <Input
           placeholder="Buscar campañas..."
@@ -165,11 +165,11 @@ export default function CampanasPage() {
                        )}
                     </div>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => { setEditCampana(c); setShowForm(true) }} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md">
+                  <div className="flex gap-1">
+                    <button onClick={() => { setEditCampana(c); setShowForm(true) }} className="p-1.5 text-gray-500 hover:text-white hover:bg-gray-700 rounded-md transition-colors">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => handleDelete(c.id)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-900/20 rounded-md">
+                    <button onClick={() => handleDelete(c.id)} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-900/20 rounded-md transition-colors">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
