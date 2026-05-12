@@ -42,11 +42,15 @@ export default function PipelinePage() {
   useEffect(() => {
     async function fetchProspectos() {
       setLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setLoading(false); return }
+
       const { data, error } = await supabase
         .from('prospectos')
         .select('*, rubros(nombre)')
+        .eq('user_id', user.id)
         .order('score', { ascending: false })
-      
+
       if (data) setProspectos(data)
       setLoading(false)
     }

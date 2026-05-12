@@ -1,18 +1,70 @@
 export type LeadStatus =
   | 'Nuevo'
+  | 'Investigando'
+  | 'Pendiente contacto'
   | 'Contactado'
   | 'Respondió'
   | 'Interesado'
+  | 'Cliente potencial fuerte'
+  | 'No interesado'
+  | 'Descartado'
+  | 'Convertido'
   | 'Reunión'
   | 'Propuesta'
   | 'Ganado'
   | 'Perdido'
 
-export const STATUS_LABELS: Record<LeadStatus, string> = {
+export type LeadPriority = 'Baja' | 'Media' | 'Alta' | 'Muy alta'
+
+export interface Lead {
+  id: string
+  user_id: string
+  nombre: string
+  rubro_id: string | null
+  rubro_nombre?: string
+  rubro?: Rubro
+  instagram: string | null
+  whatsapp: string | null
+  ciudad: string | null
+  estado: LeadStatus
+  prioridad: LeadPriority
+  fuente: string
+  observaciones: string | null
+  etiquetas: string[]
+  score: number
+  ultima_actividad: string
+  created_at: string
+  updated_at: string
+}
+
+export interface LeadNote {
+  id: string
+  lead_id: string
+  user_id: string
+  contenido: string
+  created_at: string
+}
+
+export interface LeadHistory {
+  id: string
+  lead_id: string
+  user_id: string
+  tipo: string
+  detalle: string | null
+  created_at: string
+}
+
+export const STATUS_LABELS: Record<string, string> = {
   Nuevo: 'Nuevo',
+  Investigando: 'Investigando',
+  'Pendiente contacto': 'Pendiente contacto',
   Contactado: 'Contactado',
   Respondió: 'Respondió',
   Interesado: 'Interesado',
+  'Cliente potencial fuerte': 'Cliente potencial fuerte',
+  'No interesado': 'No interesado',
+  Descartado: 'Descartado',
+  Convertido: 'Convertido',
   Reunión: 'Reunión',
   Propuesta: 'Propuesta',
   Ganado: 'Ganado',
@@ -78,6 +130,12 @@ export interface Rubro {
   oportunidad: string | null
   tipo_cliente: string | null
   mensaje_sugerido: string | null
+  icono: string | null
+  dolores_comunes: string[] | null
+  estrategias: string[] | null
+  potencial_comercial: 'alto' | 'medio' | 'bajo'
+  dificultad_cierre: 'fácil' | 'media' | 'difícil'
+  prospectos_estimados: number | null
   created_at: string
 }
 
@@ -87,6 +145,7 @@ export interface Prospecto {
   nombre: string
   negocio: string
   rubro_id: string | null
+  rubro_nombre: string | null
   rubro?: Rubro // Joined rubro
   ciudad: string | null
   instagram: string | null

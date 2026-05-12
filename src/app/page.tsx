@@ -23,11 +23,18 @@ export default function PanelPage() {
   const [prospectos, setProspectos] = useState<Prospecto[]>([])
   const [campañas, setCampañas] = useState<Campaña[]>([])
   const [actividades, setActividades] = useState<ActividadProspecto[]>([])
+  const [goals, setGoals] = useState({ mensajes_diarios: 30, reuniones_diarias: 3 })
   const supabase = createClient()
 
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
       const today = new Date().toISOString().split('T')[0]
 
       // Fetch Metricas de hoy
@@ -35,12 +42,14 @@ export default function PanelPage() {
         .from('metricas_diarias')
         .select('*')
         .eq('fecha', today)
+        .eq('user_id', user.id)
         .single()
       
       // Fetch Prospectos calientes y seguimientos
       const { data: leadsData } = await supabase
         .from('prospectos')
         .select('*, rubros(nombre)')
+        .eq('user_id', user.id)
         .order('score', { ascending: false })
 
       // Fetch Campañas activas
@@ -48,24 +57,31 @@ export default function PanelPage() {
         .from('campañas')
         .select('*, rubros(nombre)')
         .eq('estado', 'activa')
+        .eq('user_id', user.id)
 
       // Fetch Actividad reciente
       const { data: activitiesData } = await supabase
         .from('actividades_prospecto')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(5)
 
-      // Fetch Perfil actual para verificar trial
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: profile } = await supabase
-          .from('perfiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-        
-        if (profile && profile.rol === 'cliente' && profile.estado_cuenta === 'trial' && profile.trial_fin) {
+      // Fetch Perfil actual para verificar trial y obtener metas
+      const { data: profile } = await supabase
+        .from('perfiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      
+      if (profile) {
+        // Actualizar metas desde el perfil si existen
+        setGoals({
+          mensajes_diarios: profile.mensajes_diarios || 30,
+          reuniones_diarias: profile.reuniones_diarias || 3
+        })
+
+        if (profile.rol === 'cliente' && profile.estado_cuenta === 'trial' && profile.trial_fin) {
           if (new Date(profile.trial_fin) < new Date()) {
             // Trial vencido, actualizar DB
             await supabase.from('perfiles').update({ estado_cuenta: 'vencida' }).eq('id', user.id)
@@ -126,8 +142,8 @@ export default function PanelPage() {
     (l) => ['Reunión', 'Propuesta'].includes(l.estado)
   ).length
 
-  const goal_messages = 30 // Meta fija por ahora o sacada de perfil
-  const goal_meetings = 3
+  const goal_messages = goals.mensajes_diarios
+  const goal_meetings = goals.reuniones_diarias
   
   const m = metricas!
   const tasaRespuesta = m.mensajes_enviados > 0 ? Math.round((m.respuestas / m.mensajes_enviados) * 100) : 0

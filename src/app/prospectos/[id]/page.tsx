@@ -84,9 +84,22 @@ export default function ProspectoDetailPage() {
 
   const fetchData = async () => {
     setLoading(true)
-    const { data: pData } = await supabase.from('prospectos').select('*, rubros(*)').eq('id', params.id).single()
-    const { data: aData } = await supabase.from('actividades_prospecto').select('*').eq('prospecto_id', params.id).order('created_at', { ascending: false })
-    
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoading(false); return }
+
+    const { data: pData } = await supabase
+      .from('prospectos')
+      .select('*, rubros(*)')
+      .eq('id', params.id)
+      .eq('user_id', user.id)
+      .single()
+    const { data: aData } = await supabase
+      .from('actividades_prospecto')
+      .select('*')
+      .eq('prospecto_id', params.id)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
     if (pData) {
       setLead(pData)
       setFollowupDate(pData.proximo_seguimiento?.split('T')[0] || '')

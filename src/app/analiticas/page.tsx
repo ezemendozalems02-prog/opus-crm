@@ -33,10 +33,23 @@ export default function AnaliticasPage() {
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
-      const { data: pData } = await supabase.from('prospectos').select('*, rubros(*)')
-      const { data: mData } = await supabase.from('metricas_diarias').select('*').order('fecha', { ascending: true })
-      const { data: rData } = await supabase.from('rubros').select('*')
-      
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setLoading(false); return }
+
+      const { data: pData } = await supabase
+        .from('prospectos')
+        .select('*, rubros(*)')
+        .eq('user_id', user.id)
+      const { data: mData } = await supabase
+        .from('metricas_diarias')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('fecha', { ascending: true })
+      const { data: rData } = await supabase
+        .from('rubros')
+        .select('*')
+        .or(`user_id.eq.${user.id},user_id.is.null`)
+
       if (pData) setProspectos(pData)
       if (mData) setMetricas(mData)
       if (rData) setRubros(rData)

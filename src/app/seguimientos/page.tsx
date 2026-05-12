@@ -39,15 +39,24 @@ export default function SeguimientosPage() {
 
   const fetchData = async () => {
     setLoading(true)
-    const { data: sData } = await supabase
-      .from('seguimientos')
-      .select('*, prospectos(*)')
-      .order('fecha', { ascending: true })
+    const { data: { user } } = await supabase.auth.getUser()
     
-    const { data: pData } = await supabase.from('prospectos').select('*').order('nombre')
-    
-    if (sData) setSeguimientos(sData)
-    if (pData) setProspectos(pData)
+    if (user) {
+      const { data: sData } = await supabase
+        .from('seguimientos')
+        .select('*, prospectos(*)')
+        .eq('user_id', user.id)
+        .order('fecha', { ascending: true })
+      
+      const { data: pData } = await supabase
+        .from('prospectos')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('nombre')
+      
+      if (sData) setSeguimientos(sData)
+      if (pData) setProspectos(pData)
+    }
     setLoading(false)
   }
 

@@ -54,14 +54,18 @@ export default function ProspectosPage() {
     
     // Fetch profile and prospectos
     const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data: p } = await supabase.from('perfiles').select('*').eq('id', user.id).single()
-      setProfile(p)
+    if (!user) {
+      setLoading(false)
+      return
     }
+
+    const { data: p } = await supabase.from('perfiles').select('*').eq('id', user.id).single()
+    setProfile(p)
 
     const { data, error } = await supabase
       .from('prospectos')
       .select('*, rubros(nombre)')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
     
     if (error) {
@@ -91,6 +95,7 @@ export default function ProspectosPage() {
         l.nombre.toLowerCase().includes(search.toLowerCase()) ||
         l.negocio.toLowerCase().includes(search.toLowerCase()) ||
         (l as any).rubros?.nombre?.toLowerCase().includes(search.toLowerCase()) ||
+        (l.rubro_nombre || '').toLowerCase().includes(search.toLowerCase()) ||
         (l.ciudad || '').toLowerCase().includes(search.toLowerCase())
       const matchStatus = statusFilter === 'all' || l.estado === statusFilter
       const matchTier = tierFilter === 'all' || getScoreTier(computeScore(l as any)).tier === tierFilter
@@ -266,7 +271,7 @@ export default function ProspectosPage() {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <span className="text-xs text-gray-300">{(lead as any).rubros?.nombre || 'General'}</span>
+                      <span className="text-xs text-gray-300">{lead.rubro_nombre || (lead as any).rubros?.nombre || 'General'}</span>
                       <div className="flex items-center gap-1 mt-0.5">
                         <MapPin className="w-3 h-3 text-gray-600" />
                         <span className="text-[10px] text-gray-600 font-medium">{lead.ciudad || 'N/A'}</span>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -8,31 +8,101 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { User, Target, Database, Bell, CheckCircle2 } from 'lucide-react'
+import { User, Target, Database, Bell, CheckCircle2, Loader2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 export default function ConfiguracionPage() {
+  const supabase = createClient()
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [metas, setMetas] = useState({ mensajes_diarios: 30, reuniones_diarias: 3, cierres_mensuales: 10 })
-  const [perfil, setPerfil] = useState({ nombre: 'Camila Maraio', email: 'camilamaraio1996@gmail.com', whatsapp: '' })
-  const [supabase, setSupabase] = useState({
-    url: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    key: '',
-  })
+  const [perfil, setPerfil] = useState({ nombre: '', email: '', whatsapp: '' })
 
-  function guardarMetas(e: React.FormEvent) {
+  useEffect(() => {
+    async function getProfile() {
+      setLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabase
+          .from('perfiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+
+        if (profile) {
+          setPerfil({
+            nombre: profile.nombre || '',
+            email: profile.email || user.email || '',
+            whatsapp: profile.whatsapp || ''
+          })
+          setMetas({
+            mensajes_diarios: profile.mensajes_diarios || 30,
+            reuniones_diarias: profile.reuniones_diarias || 3,
+            cierres_mensuales: profile.cierres_mensuales || 10
+          })
+        }
+      }
+      setLoading(false)
+    }
+    getProfile()
+  }, [supabase])
+
+  async function guardarMetas(e: React.FormEvent) {
     e.preventDefault()
-    toast.success('Metas actualizadas correctamente')
+    setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { error } = await supabase
+        .from('perfiles')
+        .update({
+          mensajes_diarios: metas.mensajes_diarios,
+          reuniones_diarias: metas.reuniones_diarias,
+          cierres_mensuales: metas.cierres_mensuales
+        })
+        .eq('id', user.id)
+      
+      if (error) {
+        toast.error('Error al actualizar metas')
+      } else {
+        toast.success('Metas actualizadas correctamente')
+      }
+    }
+    setSaving(false)
   }
 
-  function guardarPerfil(e: React.FormEvent) {
+  async function guardarPerfil(e: React.FormEvent) {
     e.preventDefault()
-    toast.success('Perfil actualizado correctamente')
+    setSaving(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { error } = await supabase
+        .from('perfiles')
+        .update({
+          nombre: perfil.nombre,
+          whatsapp: perfil.whatsapp
+        })
+        .eq('id', user.id)
+      
+      if (error) {
+        toast.error('Error al actualizar perfil')
+      } else {
+        toast.success('Perfil actualizado correctamente')
+      }
+    }
+    setSaving(false)
   }
 
   return (
     <div>
       <PageHeader title="Configuración" description="Ajustá el sistema a tu forma de trabajar" />
-
-      <div className="max-w-2xl space-y-6">
+      
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+          <p className="text-gray-400 text-sm animate-pulse">Cargando perfil...</p>
+        </div>
+      ) : (
+        <div className="max-w-2xl space-y-6">
         {/* Perfil */}
         <Card className="bg-gray-800/50 border-gray-700">
           <CardHeader className="pb-2">
@@ -51,8 +121,8 @@ export default function ConfiguracionPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-gray-300">Email</Label>
-                  <Input type="email" value={perfil.email} onChange={(e) => setPerfil({ ...perfil, email: e.target.value })}
-                    className="bg-gray-900 border-gray-700" />
+                  <Input type="email" value={perfil.email} disabled
+                    className="bg-gray-900 border-gray-700 opacity-60 cursor-not-allowed" />
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -61,7 +131,10 @@ export default function ConfiguracionPage() {
                   placeholder="+549111234567" className="bg-gray-900 border-gray-700" />
               </div>
               <div className="flex justify-end">
-                <Button type="submit" className="bg-violet-600 hover:bg-violet-700">Guardar perfil</Button>
+                <Button type="submit" className="bg-violet-600 hover:bg-violet-700" disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Guardar perfil
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -101,7 +174,10 @@ export default function ConfiguracionPage() {
                 </div>
               </div>
               <div className="flex justify-end">
-                <Button type="submit" className="bg-violet-600 hover:bg-violet-700">Guardar metas</Button>
+                <Button type="submit" className="bg-violet-600 hover:bg-violet-700" disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Guardar metas
+                </Button>
               </div>
             </form>
           </CardContent>
@@ -154,6 +230,7 @@ export default function ConfiguracionPage() {
           </CardContent>
         </Card>
       </div>
+      )}
     </div>
   )
 }

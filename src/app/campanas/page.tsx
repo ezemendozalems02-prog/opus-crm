@@ -35,10 +35,24 @@ export default function CampanasPage() {
 
   const fetchData = async () => {
     setLoading(true)
-    const { data: cData } = await supabase.from('campañas').select('*, rubros(*)').order('created_at', { ascending: false })
-    const { data: rData } = await supabase.from('rubros').select('*').order('nombre')
-    if (cData) setCampanas(cData)
-    if (rData) setRubros(rData)
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    if (user) {
+      const { data: cData } = await supabase
+        .from('campañas')
+        .select('*, rubros(*)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        
+      const { data: rData } = await supabase
+        .from('rubros')
+        .select('*')
+        .or(`user_id.eq.${user.id},user_id.is.null`)
+        .order('nombre')
+
+      if (cData) setCampanas(cData)
+      if (rData) setRubros(rData)
+    }
     setLoading(false)
   }
 

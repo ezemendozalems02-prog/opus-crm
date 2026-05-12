@@ -1,32 +1,71 @@
 'use client'
 
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Sidebar } from './sidebar'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import type { Perfil } from '@/lib/types'
 import { Star, Clock, Menu, Zap } from 'lucide-react'
 import Link from 'next/link'
 
 export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [profile, setProfile] = useState<any>(null)
+  const router = useRouter()
+  const [profile, setProfile] = useState<Perfil | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const supabase = createClient()
-
-  useEffect(() => {
-    const getProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data } = await supabase.from('perfiles').select('*').eq('id', user.id).single()
-        setProfile(data)
-      }
-    }
-    getProfile()
-  }, [pathname, supabase])
 
   const isAuthRoute = pathname === '/login' || pathname.startsWith('/auth')
   const isSuscripcionRoute = pathname.startsWith('/suscripcion')
   const isAdminRoute = pathname.startsWith('/admin')
+
+  useEffect(() => {
+    if (isAuthRoute || isSuscripcionRoute || isAdminRoute) return
+
+    const getProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        router.push('/login')
+        return
+      }
+
+      const { data } = await supabase
+        .from('perfiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+
+      if (!data) return
+
+      setProfile(data)
+
+      // Solo aplicar restricciones a clientes normales (no super_admin)
+      if (data.rol !== 'cliente') return
+
+      if (!data.habilitado || data.estado_cuenta === 'suspendida') {
+        router.push('/suscripcion/suspendida')
+        return
+      }
+
+      // Si el trial venció, actualizar BD y redirigir
+      if (data.estado_cuenta === 'trial' && data.trial_fin && new Date(data.trial_fin) < new Date()) {
+        await supabase
+          .from('perfiles')
+          .update({ estado_cuenta: 'vencida' })
+          .eq('id', user.id)
+        router.push('/suscripcion/vencida')
+        return
+      }
+
+      if (data.estado_cuenta === 'vencida') {
+        router.push('/suscripcion/vencida')
+        return
+      }
+    }
+
+    getProfile()
+  }, [pathname, supabase, router, isAuthRoute, isSuscripcionRoute, isAdminRoute])
 
   if (isAuthRoute || isSuscripcionRoute || isAdminRoute) {
     return <>{children}</>

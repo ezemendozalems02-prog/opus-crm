@@ -46,6 +46,7 @@ export function ProspectoFormDialog({
     nombre: '',
     negocio: '',
     rubro_id: '',
+    rubro_nombre: '',
     ciudad: '',
     instagram: '',
     whatsapp: '',
@@ -61,6 +62,7 @@ export function ProspectoFormDialog({
         nombre: lead.nombre,
         negocio: lead.negocio,
         rubro_id: lead.rubro_id || '',
+        rubro_nombre: lead.rubro_nombre || (lead as any).rubros?.nombre || '',
         ciudad: lead.ciudad || '',
         instagram: lead.instagram || '',
         whatsapp: lead.whatsapp || '',
@@ -74,6 +76,7 @@ export function ProspectoFormDialog({
         nombre: '',
         negocio: '',
         rubro_id: '',
+        rubro_nombre: '',
         ciudad: '',
         instagram: '',
         whatsapp: '',
@@ -87,7 +90,13 @@ export function ProspectoFormDialog({
 
   useEffect(() => {
     async function fetchRubros() {
-      const { data } = await supabase.from('rubros').select('*').order('nombre')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('rubros')
+        .select('*')
+        .or(`user_id.eq.${user.id},user_id.is.null`)
+        .order('nombre')
       if (data) setRubros(data)
     }
     if (open) fetchRubros()
@@ -101,10 +110,15 @@ export function ProspectoFormDialog({
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No hay sesión activa')
 
+      // Logic for Rubro:
+      // 1. Check if the typed name matches an existing rubro
+      const existingRubro = rubros.find(r => r.nombre.toLowerCase() === formData.rubro_nombre?.toLowerCase())
+      
       const payload = {
         ...formData,
         user_id: user.id,
-        rubro_id: formData.rubro_id === '' ? null : formData.rubro_id,
+        rubro_id: existingRubro ? existingRubro.id : null,
+        rubro_nombre: existingRubro ? null : formData.rubro_nombre,
       }
 
       if (lead) {
@@ -165,21 +179,20 @@ export function ProspectoFormDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="rubro" className="text-gray-300">Rubro</Label>
-              <Select
-                value={formData.rubro_id || 'none'}
-                onValueChange={(val) => setFormData({ ...formData, rubro_id: val === 'none' ? '' : val })}
-              >
-                <SelectTrigger className="bg-gray-800 border-gray-700 text-white">
-                  <SelectValue placeholder="Seleccionar rubro" />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-800 border-gray-700 text-white">
-                  <SelectItem value="none">Sin rubro</SelectItem>
-                  {rubros.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>{r.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="rubro_nombre" className="text-gray-300">Rubro</Label>
+              <Input
+                id="rubro_nombre"
+                list="rubros-list"
+                value={formData.rubro_nombre || ''}
+                onChange={(e) => setFormData({ ...formData, rubro_nombre: e.target.value })}
+                className="bg-gray-800 border-gray-700 text-white focus:border-violet-500"
+                placeholder="Escribí o seleccioná un rubro"
+              />
+              <datalist id="rubros-list">
+                {rubros.map((r) => (
+                  <option key={r.id} value={r.nombre} />
+                ))}
+              </datalist>
             </div>
             <div className="space-y-2">
               <Label htmlFor="ciudad" className="text-gray-300">Ciudad / Zona</Label>
