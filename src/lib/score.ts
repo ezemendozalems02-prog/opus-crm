@@ -3,7 +3,7 @@ import { differenceInDays, parseISO } from 'date-fns'
 
 // ——— Score rules ———
 
-const STATUS_BASE: Record<LeadStatus, number> = {
+const STATUS_BASE: Partial<Record<LeadStatus, number>> = {
   'Nuevo': 0,
   'Contactado': 0,
   'Respondió': 15,

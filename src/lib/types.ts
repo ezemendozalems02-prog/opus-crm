@@ -186,9 +186,12 @@ export interface Plantilla {
   id: string
   user_id: string | null
   rubro_id: string | null
-  tipo: 'initial' | 'followup' | 'reenganche' | 'closing'
+  tipo: 'initial' | 'followup' | 'reenganche' | 'closing' | 'presentation'
   titulo: string
   contenido: string
+  tono?: string
+  cta?: string
+  objetivo?: string
   created_at: string
 }
 

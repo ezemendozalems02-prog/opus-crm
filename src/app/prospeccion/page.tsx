@@ -47,6 +47,10 @@ const STATUS_CONFIG: Record<LeadStatus, { color: string, bg: string, border: str
   'No interesado': { color: 'text-gray-400', bg: 'bg-gray-500/10', border: 'border-gray-500/20' },
   'Descartado': { color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
   'Convertido': { color: 'text-indigo-400', bg: 'bg-indigo-500/10', border: 'border-indigo-500/20' },
+  'Reunión': { color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
+  'Propuesta': { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+  'Ganado': { color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
+  'Perdido': { color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
 }
 
 const PRIORITY_CONFIG: Record<LeadPriority, { icon: any, color: string, glow: string }> = {
@@ -173,7 +177,7 @@ export default function ProspeccionPage() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? 'all')}>
             <SelectTrigger className="w-full sm:w-[160px] bg-gray-950 border-gray-800 h-14 rounded-2xl">
               <SelectValue placeholder="Estado" />
             </SelectTrigger>
@@ -185,7 +189,7 @@ export default function ProspeccionPage() {
             </SelectContent>
           </Select>
 
-          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+          <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v ?? 'all')}>
             <SelectTrigger className="w-full sm:w-[160px] bg-gray-950 border-gray-800 h-14 rounded-2xl">
               <SelectValue placeholder="Prioridad" />
             </SelectTrigger>
@@ -439,7 +443,7 @@ function LeadQuickForm({ open, onOpenChange, rubros, onSave }: { open: boolean, 
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Rubro</Label>
-              <Select value={formData.rubro_id || ''} onValueChange={v => setFormData({ ...formData, rubro_id: v })}>
+              <Select value={formData.rubro_id || ''} onValueChange={v => setFormData({ ...formData, rubro_id: v ?? '' })}>
                 <SelectTrigger className="bg-gray-900 border-gray-800 h-12 rounded-xl">
                   <SelectValue placeholder="Seleccionar rubro" />
                 </SelectTrigger>
@@ -488,7 +492,7 @@ function LeadQuickForm({ open, onOpenChange, rubros, onSave }: { open: boolean, 
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Fuente</Label>
-              <Select value={formData.fuente} onValueChange={v => setFormData({ ...formData, fuente: v })}>
+              <Select value={formData.fuente} onValueChange={v => setFormData({ ...formData, fuente: v ?? 'Manual' })}>
                 <SelectTrigger className="bg-gray-900 border-gray-800 h-12 rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
@@ -535,8 +539,9 @@ function LeadQuickForm({ open, onOpenChange, rubros, onSave }: { open: boolean, 
   )
 }
 
-function LeadDetailModal({ lead, open, onOpenChange, onSave }: { lead: Lead | null, open: boolean, onOpenChange: (o: boolean) => void, onSave: () => void }) {
-  if (!lead) return null
+function LeadDetailModal({ lead: leadProp, open, onOpenChange, onSave }: { lead: Lead | null, open: boolean, onOpenChange: (o: boolean) => void, onSave: () => void }) {
+  if (!leadProp) return null
+  const lead = leadProp
   const [loading, setLoading] = useState(false)
   const [newNote, setNewNote] = useState('')
   const [notes, setNotes] = useState<any[]>([])
@@ -707,8 +712,9 @@ function LeadDetailModal({ lead, open, onOpenChange, onSave }: { lead: Lead | nu
   )
 }
 
-function ConvertModal({ lead, open, onOpenChange, onComplete }: { lead: Lead | null, open: boolean, onOpenChange: (o: boolean) => void, onComplete: () => void }) {
-  if (!lead) return null
+function ConvertModal({ lead: leadProp, open, onOpenChange, onComplete }: { lead: Lead | null, open: boolean, onOpenChange: (o: boolean) => void, onComplete: () => void }) {
+  if (!leadProp) return null
+  const lead = leadProp
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
 
@@ -841,7 +847,7 @@ function BulkImportModal({ open, onOpenChange, rubros, onSave }: { open: boolean
         <div className="space-y-4 py-4">
           <div className="space-y-2">
             <Label className="text-xs font-bold text-gray-500 uppercase">Rubro para todos</Label>
-            <Select value={rubroId} onValueChange={setRubroId}>
+            <Select value={rubroId} onValueChange={(v) => setRubroId(v ?? '')}>
               <SelectTrigger className="bg-gray-900 border-gray-800 h-12 rounded-xl">
                 <SelectValue placeholder="Opcional: Asignar rubro" />
               </SelectTrigger>

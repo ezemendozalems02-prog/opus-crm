@@ -137,7 +137,7 @@ export default function PlantillasPage() {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3">
-            <Select value={rubroFilter} onValueChange={setRubroFilter}>
+            <Select value={rubroFilter} onValueChange={(v) => setRubroFilter(v ?? 'all')}>
               <SelectTrigger className="w-full sm:w-[180px] bg-gray-950 border-gray-800 h-11 rounded-xl text-xs">
                 <SelectValue placeholder="Filtrar por Rubro" />
               </SelectTrigger>
@@ -147,7 +147,7 @@ export default function PlantillasPage() {
               </SelectContent>
             </Select>
 
-            <Select value={tipoFilter} onValueChange={setTipoFilter}>
+            <Select value={tipoFilter} onValueChange={(v) => setTipoFilter(v ?? 'all')}>
               <SelectTrigger className="w-full sm:w-[180px] bg-gray-950 border-gray-800 h-11 rounded-xl text-xs">
                 <SelectValue placeholder="Tipo de Mensaje" />
               </SelectTrigger>

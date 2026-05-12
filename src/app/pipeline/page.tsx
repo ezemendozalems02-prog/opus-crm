@@ -21,7 +21,7 @@ const ETAPAS: { status: LeadStatus; label: string; color: string; dot: string }[
   { status: 'Perdido', label: 'Perdido', color: 'border-red-500', dot: 'bg-red-400' },
 ]
 
-const TEMP_COLORS: Record<LeadStatus, string> = {
+const TEMP_COLORS: Partial<Record<LeadStatus, string>> = {
   'Nuevo': 'border-gray-700',
   'Contactado': 'border-gray-700',
   'Respondió': 'border-yellow-600/30',
@@ -160,7 +160,7 @@ export default function PipelinePage() {
                   <KanbanCard
                     key={lead.id}
                     lead={lead}
-                    tempColor={TEMP_COLORS[lead.estado]}
+                    tempColor={TEMP_COLORS[lead.estado] ?? 'border-gray-700'}
                     onDragStart={() => handleDragStart(lead.id)}
                   />
                 ))}
