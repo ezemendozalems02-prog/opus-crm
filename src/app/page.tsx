@@ -28,84 +28,59 @@ export default function PanelPage() {
 
   useEffect(() => {
     async function fetchData() {
-      setLoading(true)
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setLoading(false)
-        return
-      }
+      try {
+        setLoading(true)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          setLoading(false)
+          return
+        }
 
-      const today = new Date().toISOString().split('T')[0]
+        const today = new Date().toISOString().split('T')[0]
 
-      // Fetch Metricas de hoy
-      const { data: metricsData } = await supabase
-        .from('metricas_diarias')
-        .select('*')
-        .eq('fecha', today)
-        .eq('user_id', user.id)
-        .single()
-      
-      // Fetch Prospectos calientes y seguimientos
-      const { data: leadsData } = await supabase
-        .from('prospectos')
-        .select('*, rubros(nombre)')
-        .eq('user_id', user.id)
-        .order('score', { ascending: false })
+        const [
+          { data: metricsData },
+          { data: leadsData },
+          { data: campaignsData },
+          { data: activitiesData },
+          { data: profile },
+        ] = await Promise.all([
+          supabase.from('metricas_diarias').select('*').eq('fecha', today).eq('user_id', user.id).single(),
+          supabase.from('prospectos').select('*, rubros(nombre)').eq('user_id', user.id).order('score', { ascending: false }),
+          supabase.from('campañas').select('*, rubros(nombre)').eq('estado', 'activa').eq('user_id', user.id),
+          supabase.from('actividades_prospecto').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(5),
+          supabase.from('perfiles').select('*').eq('id', user.id).single(),
+        ])
 
-      // Fetch Campañas activas
-      const { data: campaignsData } = await supabase
-        .from('campañas')
-        .select('*, rubros(nombre)')
-        .eq('estado', 'activa')
-        .eq('user_id', user.id)
+        if (profile) {
+          setGoals({
+            mensajes_diarios: (profile as any).mensajes_diarios || 30,
+            reuniones_diarias: (profile as any).reuniones_diarias || 3,
+          })
 
-      // Fetch Actividad reciente
-      const { data: activitiesData } = await supabase
-        .from('actividades_prospecto')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5)
-
-      // Fetch Perfil actual para verificar trial y obtener metas
-      const { data: profile } = await supabase
-        .from('perfiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-      
-      if (profile) {
-        // Actualizar metas desde el perfil si existen
-        setGoals({
-          mensajes_diarios: profile.mensajes_diarios || 30,
-          reuniones_diarias: profile.reuniones_diarias || 3
-        })
-
-        if (profile.rol === 'cliente' && profile.estado_cuenta === 'trial' && profile.trial_fin) {
-          if (new Date(profile.trial_fin) < new Date()) {
-            // Trial vencido, actualizar DB
-            await supabase.from('perfiles').update({ estado_cuenta: 'vencida' }).eq('id', user.id)
-            window.location.href = '/suscripcion/vencida'
-            return
+          if (profile.rol === 'cliente' && profile.estado_cuenta === 'trial' && profile.trial_fin) {
+            if (new Date(profile.trial_fin) < new Date()) {
+              await supabase.from('perfiles').update({ estado_cuenta: 'vencida' }).eq('id', user.id)
+              setLoading(false)
+              window.location.href = '/suscripcion/vencida'
+              return
+            }
           }
         }
-      }
 
-      setMetricas(metricsData || {
-        id: '',
-        user_id: '',
-        fecha: today,
-        mensajes_enviados: 0,
-        respuestas: 0,
-        reuniones: 0,
-        propuestas: 0,
-        cierres: 0,
-        created_at: ''
-      })
-      setProspectos(leadsData || [])
-      setCampañas(campaignsData || [])
-      setActividades(activitiesData || [])
-      setLoading(false)
+        setMetricas(metricsData || {
+          id: '', user_id: '', fecha: today,
+          mensajes_enviados: 0, respuestas: 0, reuniones: 0,
+          propuestas: 0, cierres: 0, created_at: '',
+        })
+        setProspectos(leadsData || [])
+        setCampañas(campaignsData || [])
+        setActividades(activitiesData || [])
+      } catch (err) {
+        console.error('Error cargando panel:', err)
+      } finally {
+        setLoading(false)
+      }
     }
 
     fetchData()
