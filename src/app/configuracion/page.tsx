@@ -20,29 +20,30 @@ export default function ConfiguracionPage() {
 
   useEffect(() => {
     async function getProfile() {
-      setLoading(true)
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: profile } = await supabase
-          .from('perfiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
+      try {
+        setLoading(true)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+
+        const { data: profile } = await supabase.from('perfiles').select('*').eq('id', user.id).single()
 
         if (profile) {
           setPerfil({
             nombre: profile.nombre || '',
             email: profile.email || user.email || '',
-            whatsapp: profile.whatsapp || ''
+            whatsapp: (profile as any).whatsapp || '',
           })
           setMetas({
-            mensajes_diarios: profile.mensajes_diarios || 30,
-            reuniones_diarias: profile.reuniones_diarias || 3,
-            cierres_mensuales: profile.cierres_mensuales || 10
+            mensajes_diarios: (profile as any).mensajes_diarios || 30,
+            reuniones_diarias: (profile as any).reuniones_diarias || 3,
+            cierres_mensuales: (profile as any).cierres_mensuales || 10,
           })
         }
+      } catch {
+        // silent
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
     getProfile()
   }, [supabase])
@@ -97,9 +98,10 @@ export default function ConfiguracionPage() {
       <PageHeader title="Configuración" description="Ajustá el sistema a tu forma de trabajar" />
       
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
-          <p className="text-gray-400 text-sm animate-pulse">Cargando perfil...</p>
+        <div className="max-w-2xl space-y-6">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-52 bg-gray-800/30 rounded-xl border border-gray-800 animate-pulse" />
+          ))}
         </div>
       ) : (
         <div className="max-w-2xl space-y-6">

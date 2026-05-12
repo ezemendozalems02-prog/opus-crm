@@ -50,30 +50,24 @@ export default function ProspectosPage() {
   const supabase = createClient()
 
   const fetchProspectos = async () => {
-    setLoading(true)
-    
-    // Fetch profile and prospectos
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setLoading(false)
-      return
-    }
+    try {
+      setLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-    const { data: p } = await supabase.from('perfiles').select('*').eq('id', user.id).single()
-    setProfile(p)
+      const [{ data: p }, { data, error }] = await Promise.all([
+        supabase.from('perfiles').select('*').eq('id', user.id).single(),
+        supabase.from('prospectos').select('*, rubros(nombre)').eq('user_id', user.id).order('created_at', { ascending: false }),
+      ])
 
-    const { data, error } = await supabase
-      .from('prospectos')
-      .select('*, rubros(nombre)')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-    
-    if (error) {
+      setProfile(p)
+      if (error) toast.error('Error al cargar prospectos')
+      else setProspectos(data || [])
+    } catch {
       toast.error('Error al cargar prospectos')
-    } else {
-      setProspectos(data || [])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {

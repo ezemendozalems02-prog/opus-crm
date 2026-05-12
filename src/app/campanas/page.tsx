@@ -34,26 +34,23 @@ export default function CampanasPage() {
   const supabase = createClient()
 
   const fetchData = async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (user) {
-      const { data: cData } = await supabase
-        .from('campañas')
-        .select('*, rubros(*)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        
-      const { data: rData } = await supabase
-        .from('rubros')
-        .select('*')
-        .or(`user_id.eq.${user.id},user_id.is.null`)
-        .order('nombre')
+    try {
+      setLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const [{ data: cData }, { data: rData }] = await Promise.all([
+        supabase.from('campañas').select('*, rubros(*)').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('rubros').select('*').or(`user_id.eq.${user.id},user_id.is.null`).order('nombre'),
+      ])
 
       if (cData) setCampanas(cData)
       if (rData) setRubros(rData)
+    } catch {
+      // silent
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -109,10 +106,9 @@ export default function CampanasPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
-          <div className="col-span-full py-20 flex flex-col items-center gap-3">
-            <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
-            <p className="text-gray-500">Cargando campañas...</p>
-          </div>
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-52 bg-gray-800/20 rounded-2xl animate-pulse border border-gray-800" />
+          ))
         ) : campanas.length === 0 ? (
           <>
             <div className="col-span-full flex items-center gap-2 bg-violet-900/20 border border-violet-700/30 rounded-xl px-4 py-2.5">

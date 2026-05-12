@@ -41,18 +41,23 @@ export default function PipelinePage() {
 
   useEffect(() => {
     async function fetchProspectos() {
-      setLoading(true)
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setLoading(false); return }
+      try {
+        setLoading(true)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
 
-      const { data, error } = await supabase
-        .from('prospectos')
-        .select('*, rubros(nombre)')
-        .eq('user_id', user.id)
-        .order('score', { ascending: false })
+        const { data } = await supabase
+          .from('prospectos')
+          .select('*, rubros(nombre)')
+          .eq('user_id', user.id)
+          .order('score', { ascending: false })
 
-      if (data) setProspectos(data)
-      setLoading(false)
+        if (data) setProspectos(data)
+      } catch {
+        // silent
+      } finally {
+        setLoading(false)
+      }
     }
     fetchProspectos()
   }, [supabase])
@@ -105,9 +110,18 @@ export default function PipelinePage() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
-        <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
-        <p className="text-gray-400 text-sm animate-pulse">Cargando pipeline...</p>
+      <div>
+        <PageHeader title="Pipeline" description="Cargando etapas..." />
+        <div className="flex gap-3 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0" style={{ minHeight: '75vh' }}>
+          {ETAPAS.map((etapa) => (
+            <div key={etapa.status} className="flex-shrink-0 w-56 sm:w-64">
+              <div className="h-8 bg-gray-800/50 rounded-lg mb-2 animate-pulse" />
+              {[1, 2].map((i) => (
+                <div key={i} className="h-28 bg-gray-800/30 rounded-xl mb-2 border border-gray-800 animate-pulse" />
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
     )
   }

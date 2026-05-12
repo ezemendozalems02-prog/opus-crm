@@ -48,26 +48,19 @@ export default function PlantillasPage() {
   const supabase = createClient()
 
   const fetchData = async () => {
-    setLoading(true)
     try {
+      setLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
-      
-      const { data: pData } = await supabase
-        .from('plantillas')
-        .select('*')
-        .or(`user_id.eq.${user?.id},user_id.is.null`)
-        .order('created_at', { ascending: false })
-        
-      const { data: rData } = await supabase
-        .from('rubros')
-        .select('*')
-        .or(`user_id.eq.${user?.id},user_id.is.null`)
-        .order('nombre')
+
+      const [{ data: pData }, { data: rData }] = await Promise.all([
+        supabase.from('plantillas').select('*').or(`user_id.eq.${user?.id},user_id.is.null`).order('created_at', { ascending: false }),
+        supabase.from('rubros').select('*').or(`user_id.eq.${user?.id},user_id.is.null`).order('nombre'),
+      ])
 
       if (pData) setPlantillas(pData)
       if (rData) setRubros(rData)
-    } catch (e) {
-      console.error(e)
+    } catch {
+      // silent
     } finally {
       setLoading(false)
     }

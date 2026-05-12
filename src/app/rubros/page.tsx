@@ -51,26 +51,19 @@ export default function RubrosPage() {
   const supabase = createClient()
 
   const fetchData = async () => {
-    setLoading(true)
     try {
+      setLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
-      
-      // Fetch rubros (mine or global)
-      const { data: rData } = await supabase
-        .from('rubros')
-        .select('*')
-        .or(`user_id.eq.${user?.id},user_id.is.null`)
-        .order('nombre')
-        
-      const { data: pData } = await supabase
-        .from('plantillas')
-        .select('*')
-        .or(`user_id.eq.${user?.id},user_id.is.null`)
+
+      const [{ data: rData }, { data: pData }] = await Promise.all([
+        supabase.from('rubros').select('*').or(`user_id.eq.${user?.id},user_id.is.null`).order('nombre'),
+        supabase.from('plantillas').select('*').or(`user_id.eq.${user?.id},user_id.is.null`),
+      ])
 
       if (rData) setRubros(rData)
       if (pData) setPlantillas(pData)
-    } catch (e) {
-      console.error(e)
+    } catch {
+      // silent
     } finally {
       setLoading(false)
     }

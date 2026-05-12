@@ -7,7 +7,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, Cell
 } from 'recharts'
-import { TrendingUp, Users, Trophy, MessageSquare, Percent, Loader2 } from 'lucide-react'
+import { TrendingUp, Users, Trophy, MessageSquare, Percent } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Prospecto, MetricasDiarias, Rubro } from '@/lib/types'
 import { format, subDays, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns'
@@ -32,37 +32,43 @@ export default function AnaliticasPage() {
 
   useEffect(() => {
     async function fetchData() {
-      setLoading(true)
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setLoading(false); return }
+      try {
+        setLoading(true)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
 
-      const { data: pData } = await supabase
-        .from('prospectos')
-        .select('*, rubros(*)')
-        .eq('user_id', user.id)
-      const { data: mData } = await supabase
-        .from('metricas_diarias')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('fecha', { ascending: true })
-      const { data: rData } = await supabase
-        .from('rubros')
-        .select('*')
-        .or(`user_id.eq.${user.id},user_id.is.null`)
+        const [{ data: pData }, { data: mData }, { data: rData }] = await Promise.all([
+          supabase.from('prospectos').select('*, rubros(*)').eq('user_id', user.id),
+          supabase.from('metricas_diarias').select('*').eq('user_id', user.id).order('fecha', { ascending: true }),
+          supabase.from('rubros').select('*').or(`user_id.eq.${user.id},user_id.is.null`),
+        ])
 
-      if (pData) setProspectos(pData)
-      if (mData) setMetricas(mData)
-      if (rData) setRubros(rData)
-      setLoading(false)
+        if (pData) setProspectos(pData)
+        if (mData) setMetricas(mData)
+        if (rData) setRubros(rData)
+      } catch {
+        // silent
+      } finally {
+        setLoading(false)
+      }
     }
     fetchData()
   }, [supabase])
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
-        <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
-        <p className="text-gray-400 text-sm">Analizando datos...</p>
+      <div className="space-y-6">
+        <PageHeader title="Analíticas" description="Calculando métricas..." />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 bg-gray-800/30 rounded-xl border border-gray-800 animate-pulse" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="h-72 bg-gray-800/30 rounded-xl border border-gray-800 animate-pulse" />
+          <div className="h-72 bg-gray-800/30 rounded-xl border border-gray-800 animate-pulse" />
+        </div>
+        <div className="h-64 bg-gray-800/30 rounded-xl border border-gray-800 animate-pulse" />
       </div>
     )
   }

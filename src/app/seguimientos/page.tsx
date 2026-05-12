@@ -38,26 +38,23 @@ export default function SeguimientosPage() {
   const supabase = createClient()
 
   const fetchData = async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (user) {
-      const { data: sData } = await supabase
-        .from('seguimientos')
-        .select('*, prospectos(*)')
-        .eq('user_id', user.id)
-        .order('fecha', { ascending: true })
-      
-      const { data: pData } = await supabase
-        .from('prospectos')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('nombre')
-      
+    try {
+      setLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const [{ data: sData }, { data: pData }] = await Promise.all([
+        supabase.from('seguimientos').select('*, prospectos(*)').eq('user_id', user.id).order('fecha', { ascending: true }),
+        supabase.from('prospectos').select('*').eq('user_id', user.id).order('nombre'),
+      ])
+
       if (sData) setSeguimientos(sData)
       if (pData) setProspectos(pData)
+    } catch {
+      // silent
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -140,10 +137,9 @@ export default function SeguimientosPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
-          <div className="col-span-full py-20 flex flex-col items-center gap-3">
-            <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
-            <p className="text-gray-500">Cargando seguimientos...</p>
-          </div>
+          Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-48 bg-gray-800/20 rounded-2xl animate-pulse border border-gray-800" />
+          ))
         ) : seguimientos.length === 0 ? (
           <>
             <div className="col-span-full flex items-center gap-2 bg-violet-900/20 border border-violet-700/30 rounded-xl px-4 py-2.5">
